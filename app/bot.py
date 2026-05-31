@@ -261,13 +261,13 @@ def format_result(data: dict, recommendations: list[dict]) -> str:
     return "\n".join(lines)
 
 
-async def main():
+bot = Bot(token=config.bot_token)
+dp = Dispatcher(storage=MemoryStorage())
+dp.include_router(router)
+
+
+async def start_polling():
     logging.basicConfig(level=logging.INFO)
-    bot = Bot(token=config.bot_token)
-    dp = Dispatcher(storage=MemoryStorage())
-    dp.include_router(router)
     await dp.start_polling(bot)
 
 
-if __name__ == "__main__":
-    asyncio.run(main())
