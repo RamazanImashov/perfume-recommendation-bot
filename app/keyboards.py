@@ -1,11 +1,15 @@
 from aiogram.types import KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 
+remove_keyboard = ReplyKeyboardRemove()
+
 
 def main_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="Подобрать аромат")],
-            [KeyboardButton(text="Наслаивание")],
+            [KeyboardButton(text="Наслаивание вручную")],
+            [KeyboardButton(text="Все мои парфюмы")],
+            [KeyboardButton(text="Отмена")],
         ],
         resize_keyboard=True,
     )
@@ -64,9 +68,9 @@ def effect_keyboard() -> ReplyKeyboardMarkup:
 def time_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
+            [KeyboardButton(text="Авто")],
             [KeyboardButton(text="Утро"), KeyboardButton(text="День")],
             [KeyboardButton(text="Вечер"), KeyboardButton(text="Ночь")],
-            [KeyboardButton(text="Авто по погоде")],
             [KeyboardButton(text="Отмена")],
         ],
         resize_keyboard=True,
@@ -76,13 +80,21 @@ def time_keyboard() -> ReplyKeyboardMarkup:
 def season_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
+            [KeyboardButton(text="Авто")],
             [KeyboardButton(text="Весна"), KeyboardButton(text="Лето")],
             [KeyboardButton(text="Осень"), KeyboardButton(text="Зима")],
-            [KeyboardButton(text="Авто по погоде")],
             [KeyboardButton(text="Отмена")],
         ],
         resize_keyboard=True,
     )
 
 
-remove_keyboard = ReplyKeyboardRemove()
+def recommendation_mode_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="Обычный парфюм")],
+            [KeyboardButton(text="Наслаивание")],
+            [KeyboardButton(text="Отмена")],
+        ],
+        resize_keyboard=True,
+    )

@@ -1,165 +1,181 @@
 from __future__ import annotations
 
-import re
-from collections.abc import Iterable
+from itertools import combinations
+
 from app.data.perfumes import PERFUMES
+from app.services.recommender import find_perfume, score_perfume
 
 
-HEAVY_TAGS = {"tobacco", "coffee", "leather", "dense", "gourmand", "vanilla", "praline", "cinnamon", "sweet", "amber"}
-FRESH_TAGS = {"fresh", "citrus", "aquatic", "tea", "clean", "mint", "aromatic", "blue", "green"}
-DARK_TAGS = {"dark", "leather", "oud", "tobacco", "coffee", "woody", "amber"}
-ROMANTIC_TAGS = {"romantic", "sexy", "sweet", "warm", "cherry", "vanilla"}
+HEAVY_TAGS = {"tobacco", "coffee", "leather", "dense", "oud", "gourmand", "vanilla", "amber", "warm", "sweet"}
+FRESH_TAGS = {"fresh", "citrus", "aquatic", "clean", "tea", "light", "blue", "fruity"}
+ROMANTIC_TAGS = {"cherry", "almond", "romantic", "soft", "sweet", "warm"}
+WOODY_TAGS = {"woody", "oud", "smoky", "amber", "patchouli", "vetiver"}
 
 
-def _as_set(value) -> set[str]:
-    if value is None:
-        return set()
-    if isinstance(value, str):
-        return {value}
-    if isinstance(value, dict):
-        result = set()
-        for item in value.values():
-            result.update(_as_set(item))
-        return result
-    if isinstance(value, Iterable):
-        result = set()
-        for item in value:
-            result.update(_as_set(item))
-        return result
-    return {str(value)}
-
-
-def _profile(perfume: dict) -> set[str]:
-    keys = ["type", "effects", "weather_tags", "occasions", "outfits", "notes", "layer_tags"]
+def _tags(perfume: dict) -> set[str]:
     result: set[str] = set()
-    for key in keys:
-        result.update(_as_set(perfume.get(key)))
+
+    for key in ("type", "effects", "occasions", "outfits", "weather_tags"):
+        value = perfume.get(key, [])
+        if isinstance(value, list):
+            result.update(str(x) for x in value)
+        elif value:
+            result.add(str(value))
+
+    notes = perfume.get("notes", [])
+    if isinstance(notes, dict):
+        for value in notes.values():
+            if isinstance(value, list):
+                result.update(str(x) for x in value)
+    elif isinstance(notes, list):
+        result.update(str(x) for x in notes)
+
     return result
 
 
-def _normalize(text: str) -> str:
-    return re.sub(r"[^a-zа-яё0-9]+", " ", text.lower()).strip()
+def _strength(perfume: dict) -> str:
+    return str(perfume.get("strength", "medium"))
 
 
-def find_perfume(query: str) -> dict | None:
-    q = _normalize(query)
-    if not q:
-        return None
+def _choose_base_and_top(a: dict, b: dict) -> tuple[dict, dict]:
+    a_tags = _tags(a)
+    b_tags = _tags(b)
 
-    best = None
-    best_score = 0
-
-    for perfume in PERFUMES:
-        name = _normalize(perfume.get("name", ""))
-        brand = _normalize(perfume.get("brand", ""))
-        full = f"{name} {brand}"
-
+    def weight(p: dict, tags: set[str]) -> int:
         score = 0
-        if q == name or q == full:
-            score = 100
-        elif q in full:
-            score = 80
-        else:
-            q_words = set(q.split())
-            full_words = set(full.split())
-            score = len(q_words & full_words) * 20
+        score += 5 if _strength(p) == "strong" else 2 if _strength(p) == "medium" else 0
+        score += len(tags.intersection(HEAVY_TAGS)) * 2
+        score += len(tags.intersection(WOODY_TAGS))
+        score -= len(tags.intersection(FRESH_TAGS))
+        return score
 
-        if score > best_score:
-            best_score = score
-            best = perfume
-
-    return best if best_score >= 20 else None
+    if weight(a, a_tags) >= weight(b, b_tags):
+        return a, b
+    return b, a
 
 
-def analyze_layering(first_query: str, second_query: str) -> dict:
-    first = find_perfume(first_query)
-    second = find_perfume(second_query)
+def analyze_pair(
+    first: dict,
+    second: dict,
+    weather: dict | None = None,
+    event: str = "ordinary_day",
+    outfit_text: str = "",
+    circumstance: str = "outdoor",
+    effect: str = "any",
+    time_of_day: str = "auto",
+    season: str = "auto",
+) -> dict:
+    weather = weather or {"temperature": 20, "rain": 0, "precipitation": 0, "wind_speed": 0}
 
-    if not first or not second:
-        return {
-            "ok": False,
-            "message": "Не нашел один из ароматов. Напиши названия ближе к базе, например: Oud Wood + Lost Cherry.",
-        }
+    base, top = _choose_base_and_top(first, second)
+    base_tags = _tags(base)
+    top_tags = _tags(top)
+    all_tags = base_tags | top_tags
 
-    if first.get("id") == second.get("id"):
-        return {"ok": False, "message": "Это один и тот же аромат. Для наслаивания выбери два разных."}
+    base_score = score_perfume(base, weather, event, outfit_text, circumstance, effect, time_of_day, season)["score"]
+    top_score = score_perfume(top, weather, event, outfit_text, circumstance, effect, time_of_day, season)["score"]
 
-    p1 = _profile(first)
-    p2 = _profile(second)
-
-    score = 50
+    score = int((base_score + top_score) / 2)
     reasons: list[str] = []
     warnings: list[str] = []
 
-    if p1 & FRESH_TAGS and p2 & HEAVY_TAGS:
-        score += 15
-        reasons.append("свежий аромат может облегчить тяжелый/сладкий")
-    if p2 & FRESH_TAGS and p1 & HEAVY_TAGS:
-        score += 15
-        reasons.append("свежий аромат может облегчить тяжелый/сладкий")
-    if p1 & ROMANTIC_TAGS and p2 & DARK_TAGS:
-        score += 10
-        reasons.append("романтичная сладость хорошо ложится на темную древесную/амбровую базу")
-    if p2 & ROMANTIC_TAGS and p1 & DARK_TAGS:
-        score += 10
-        reasons.append("романтичная сладость хорошо ложится на темную древесную/амбровую базу")
-    if p1 & FRESH_TAGS and p2 & FRESH_TAGS:
+    if base_tags.intersection(WOODY_TAGS) and top_tags.intersection(FRESH_TAGS):
+        score += 9
+        reasons.append("древесная база + свежий верх дают дорогой чистый шлейф")
+
+    if base_tags.intersection(ROMANTIC_TAGS) and top_tags.intersection(WOODY_TAGS | FRESH_TAGS):
+        score += 6
+        reasons.append("сладость становится мягче и чище")
+
+    if base_tags.intersection(HEAVY_TAGS) and top_tags.intersection(FRESH_TAGS):
         score += 5
-        reasons.append("оба свежие — безопасное дневное сочетание")
-    if p1 & HEAVY_TAGS and p2 & HEAVY_TAGS:
-        score -= 20
-        warnings.append("оба аромата плотные — легко получить тяжелую смесь")
-    if first.get("strength") == "strong" and second.get("strength") == "strong":
-        score -= 15
-        warnings.append("оба сильные — используй очень мало")
+        reasons.append("свежий верх облегчает плотную базу")
 
-    # Specific strong recommendations from this collection.
-    pair_ids = {first.get("id"), second.get("id")}
-    special: dict[frozenset[int], tuple[int, str, str]] = {
-        frozenset({9, 21}): (92, "Oud Wood + Lost Cherry", "дорогое романтичное сочетание для свидания и бара"),
-        frozenset({12, 23}): (86, "Imagination + The Most Wanted", "чистое начало + теплый вечерний шлейф"),
-        frozenset({11, 12}): (88, "Pacific Chill + Imagination", "максимально чистая свежесть для жары"),
-        frozenset({4, 9}): (84, "Aventus + Oud Wood", "уверенный smart casual, чище и дороже"),
-        frozenset({23, 29}): (62, "The Most Wanted + Liquid Brun", "очень сладко и плотно; только холод и 1+1 пшик"),
-        frozenset({2, 29}): (55, "Tobacco Vanille + Liquid Brun", "слишком плотная ванильная сладость; лучше не для помещения"),
-        frozenset({26, 28}): (82, "Turathi Blue + Maahir Legacy", "свежий цитрус + зеленая мята, хороший дневной микс"),
-        frozenset({27, 28}): (85, "Art Of Universe + Maahir Legacy", "летняя яркая свежесть, мята и цитрус"),
-    }
-    if frozenset(pair_ids) in special:
-        score, title, extra = special[frozenset(pair_ids)]
-        reasons.insert(0, extra)
+    if event in {"club", "birthday", "party"} and ("sweet" in all_tags or "loud" in all_tags):
+        score += 5
+        reasons.append("достаточно заметно для вечера/клуба")
 
-    score = max(0, min(100, score))
+    if effect == "expensive" and ("expensive" in all_tags or "woody" in all_tags or "oud" in all_tags):
+        score += 4
+        reasons.append("пара звучит дороже за счет древесности/чистоты")
 
-    if score >= 80:
-        verdict = "Хорошее сочетание"
-    elif score >= 65:
-        verdict = "Можно носить, но аккуратно"
-    elif score >= 50:
-        verdict = "Слабое сочетание"
-    else:
-        verdict = "Лучше не смешивать"
+    if effect == "clean" and all_tags.intersection({"fresh", "clean", "tea", "citrus"}):
+        score += 4
+        reasons.append("сохраняет чистый эффект")
 
-    # Safer application rule: strong/heavy first under clothes, fresh/soft later on open skin/clothes.
-    first_profile = _profile(first)
-    second_profile = _profile(second)
-    if first_profile & HEAVY_TAGS and second_profile & FRESH_TAGS:
-        order = f"Сначала {first['name']} — 1 пшик на грудь под одежду. Потом {second['name']} — 1–2 пшика на шею/одежду."
-    elif second_profile & HEAVY_TAGS and first_profile & FRESH_TAGS:
-        order = f"Сначала {second['name']} — 1 пшик на грудь под одежду. Потом {first['name']} — 1–2 пшика на шею/одежду."
-    else:
-        order = f"Начни с 1 пшика {first['name']} на грудь и 1 пшика {second['name']} на шею. Не делай больше 2–3 пшиков суммарно."
+    if _strength(base) == "strong" and _strength(top) == "strong":
+        score -= 6
+        warnings.append("оба аромата сильные: легко переборщить")
+
+    if len(base_tags.intersection(HEAVY_TAGS)) >= 3 and len(top_tags.intersection(HEAVY_TAGS)) >= 3:
+        score -= 8
+        warnings.append("слишком плотная пара")
+
+    temp = float((weather or {}).get("temperature") or 20)
+    if temp >= 28 and all_tags.intersection({"tobacco", "coffee", "leather", "dense", "gourmand"}):
+        score -= 8
+        warnings.append("в жару эта пара может душить")
+
+    if circumstance in {"small_room", "close_distance"} and (_strength(base) == "strong" or _strength(top) == "strong"):
+        score -= 5
+        warnings.append("для близкой дистанции лучше меньше пшиков")
 
     if not reasons:
-        reasons.append("нет явного конфликта по профилю, но сочетание лучше тестировать малыми дозами")
+        reasons.append("пара сбалансирована по ситуации лучше остальных вариантов")
 
     return {
-        "ok": True,
         "score": score,
-        "verdict": verdict,
-        "first": first,
-        "second": second,
-        "order": order,
-        "reasons": reasons[:4],
-        "warnings": warnings[:4],
+        "base": base,
+        "top": top,
+        "reasons": reasons[:3],
+        "warnings": warnings[:2],
+        "apply": _apply_rule(base, top, circumstance, temp),
     }
+
+
+def _apply_rule(base: dict, top: dict, circumstance: str, temp: float) -> str:
+    if circumstance in {"small_room", "close_distance"}:
+        return f"{base['name']}: 1 пшик на грудь. {top['name']}: 1 пшик на шею."
+    if temp >= 28:
+        return f"{base['name']}: 1 пшик. {top['name']}: 1–2 пшика."
+    return f"{base['name']}: 1–2 пшика как база. {top['name']}: 1–2 пшика сверху."
+
+
+def recommend_layering(
+    weather: dict,
+    event: str,
+    outfit_text: str,
+    circumstance: str,
+    effect: str,
+    time_of_day: str = "auto",
+    season: str = "auto",
+    limit: int = 3,
+) -> list[dict]:
+    results: list[dict] = []
+
+    for first, second in combinations(PERFUMES, 2):
+        result = analyze_pair(
+            first=first,
+            second=second,
+            weather=weather,
+            event=event,
+            outfit_text=outfit_text,
+            circumstance=circumstance,
+            effect=effect,
+            time_of_day=time_of_day,
+            season=season,
+        )
+        results.append(result)
+
+    results.sort(key=lambda item: item["score"], reverse=True)
+    return results[:limit]
+
+
+def analyze_pair_by_names(first_name: str, second_name: str) -> dict | None:
+    first = find_perfume(first_name)
+    second = find_perfume(second_name)
+
+    if not first or not second:
+        return None
+
+    return analyze_pair(first, second)

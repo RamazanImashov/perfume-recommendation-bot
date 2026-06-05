@@ -1,11 +1,10 @@
-import os
 import logging
+import os
 
-from fastapi import FastAPI, Request, HTTPException
 from aiogram.types import Update
+from fastapi import FastAPI, HTTPException, Request
 
 from app.bot import bot, dp
-
 
 logging.basicConfig(level=logging.INFO)
 
@@ -20,7 +19,6 @@ WEBHOOK_PATH = f"/webhook/{WEBHOOK_SECRET}"
 async def home():
     return {
         "status": "Perfume bot FastAPI is running",
-        "public_url": PUBLIC_URL,
         "webhook_path": WEBHOOK_PATH,
     }
 
@@ -31,6 +29,7 @@ async def set_webhook():
         raise HTTPException(status_code=500, detail="PUBLIC_URL is not set")
 
     webhook_url = f"{PUBLIC_URL}{WEBHOOK_PATH}"
+
     await bot.delete_webhook(drop_pending_updates=True)
     await bot.set_webhook(url=webhook_url, drop_pending_updates=True)
     info = await bot.get_webhook_info()
@@ -61,7 +60,6 @@ async def telegram_webhook(request: Request):
         update = Update.model_validate(data, context={"bot": bot})
         await dp.feed_update(bot, update)
         return {"ok": True}
-    except Exception as e:
+    except Exception as error:
         logging.exception("Webhook error")
-        return {"ok": False, "error": str(e)}
-
+        return {"ok": False, "error": str(error)}

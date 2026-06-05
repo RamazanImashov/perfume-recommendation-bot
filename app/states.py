@@ -7,11 +7,11 @@ class PerfumeForm(StatesGroup):
     outfit = State()
     circumstance = State()
     effect = State()
-    time_of_day = State()
+    time = State()
     season = State()
+    mode = State()
 
 
-class LayeringForm(StatesGroup):
-    first = State()
-    second = State()
-
+class ManualLayeringForm(StatesGroup):
+    first_perfume = State()
+    second_perfume = State()
