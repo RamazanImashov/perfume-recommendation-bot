@@ -31,13 +31,8 @@ async def set_webhook():
         raise HTTPException(status_code=500, detail="PUBLIC_URL is not set")
 
     webhook_url = f"{PUBLIC_URL}{WEBHOOK_PATH}"
-
     await bot.delete_webhook(drop_pending_updates=True)
-    await bot.set_webhook(
-        url=webhook_url,
-        drop_pending_updates=True,
-    )
-
+    await bot.set_webhook(url=webhook_url, drop_pending_updates=True)
     info = await bot.get_webhook_info()
 
     return {
@@ -63,13 +58,10 @@ async def delete_webhook():
 async def telegram_webhook(request: Request):
     try:
         data = await request.json()
-        logging.info("Telegram update received: %s", data)
-
         update = Update.model_validate(data, context={"bot": bot})
         await dp.feed_update(bot, update)
-
         return {"ok": True}
-
     except Exception as e:
         logging.exception("Webhook error")
         return {"ok": False, "error": str(e)}
+

@@ -3,7 +3,10 @@ from aiogram.types import KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemo
 
 def main_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="Подобрать аромат")]],
+        keyboard=[
+            [KeyboardButton(text="Подобрать аромат")],
+            [KeyboardButton(text="Наслаивание")],
+        ],
         resize_keyboard=True,
     )
 
@@ -52,6 +55,30 @@ def effect_keyboard() -> ReplyKeyboardMarkup:
             [KeyboardButton(text="Сексуально"), KeyboardButton(text="Заметно")],
             [KeyboardButton(text="Спокойно"), KeyboardButton(text="Необычно")],
             [KeyboardButton(text="Не важно")],
+            [KeyboardButton(text="Отмена")],
+        ],
+        resize_keyboard=True,
+    )
+
+
+def time_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="Утро"), KeyboardButton(text="День")],
+            [KeyboardButton(text="Вечер"), KeyboardButton(text="Ночь")],
+            [KeyboardButton(text="Авто по погоде")],
+            [KeyboardButton(text="Отмена")],
+        ],
+        resize_keyboard=True,
+    )
+
+
+def season_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="Весна"), KeyboardButton(text="Лето")],
+            [KeyboardButton(text="Осень"), KeyboardButton(text="Зима")],
+            [KeyboardButton(text="Авто по погоде")],
             [KeyboardButton(text="Отмена")],
         ],
         resize_keyboard=True,

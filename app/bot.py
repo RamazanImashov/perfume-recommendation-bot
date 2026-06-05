@@ -1,4 +1,4 @@
-import asyncio
+
 import logging
 
 from aiogram import Bot, Dispatcher, F, Router
@@ -15,16 +15,21 @@ from app.keyboards import (
     location_keyboard,
     main_keyboard,
     remove_keyboard,
+    season_keyboard,
+    time_keyboard,
 )
+from app.services.layering import analyze_layering
 from app.services.recommender import (
     CIRCUMSTANCE_MAP,
     EFFECT_MAP,
     EVENT_MAP,
+    SEASON_MAP,
+    TIME_MAP,
     adjust_sprays,
     recommend,
 )
 from app.services.weather import get_coordinates, get_weather
-from app.states import PerfumeForm
+from app.states import LayeringForm, PerfumeForm
 
 
 router = Router()
@@ -51,7 +56,7 @@ async def start(message: Message, state: FSMContext):
 
     await state.clear()
     await message.answer(
-        "Я подберу топ-3 аромата под погоду, место, мероприятие и твой образ.",
+        "Я подберу топ-3 аромата под погоду, место, время суток, сезон, мероприятие и твой образ. Еще умею проверять наслаивание двух ароматов.",
         reply_markup=main_keyboard(),
     )
 
@@ -76,6 +81,48 @@ async def choose_location(message: Message, state: FSMContext):
         "Отправь геолокацию или напиши город. Например: Santa Clara, Bishkek, Almaty.",
         reply_markup=location_keyboard(),
     )
+
+
+@router.message(F.text == "Наслаивание")
+async def start_layering(message: Message, state: FSMContext):
+    if await deny_if_not_owner(message):
+        return
+
+    await state.clear()
+    await state.set_state(LayeringForm.first)
+    await message.answer(
+        "Напиши первый аромат. Например: Oud Wood.",
+        reply_markup=remove_keyboard,
+    )
+
+
+@router.message(LayeringForm.first)
+async def get_layering_first(message: Message, state: FSMContext):
+    if await deny_if_not_owner(message):
+        return
+
+    first = (message.text or "").strip()
+    if len(first) < 2:
+        await message.answer("Напиши название первого аромата.")
+        return
+
+    await state.update_data(layering_first=first)
+    await state.set_state(LayeringForm.second)
+    await message.answer("Теперь напиши второй аромат. Например: Lost Cherry.")
+
+
+@router.message(LayeringForm.second)
+async def get_layering_second(message: Message, state: FSMContext):
+    if await deny_if_not_owner(message):
+        return
+
+    second = (message.text or "").strip()
+    data = await state.get_data()
+    first = data.get("layering_first", "")
+
+    result = analyze_layering(first, second)
+    await state.clear()
+    await message.answer(format_layering_result(result), reply_markup=main_keyboard())
 
 
 @router.message(PerfumeForm.location, F.location)
@@ -186,6 +233,36 @@ async def get_effect(message: Message, state: FSMContext):
         return
 
     await state.update_data(effect=effect, effect_label=message.text)
+    await state.set_state(PerfumeForm.time_of_day)
+    await message.answer("Когда будешь носить?", reply_markup=time_keyboard())
+
+
+@router.message(PerfumeForm.time_of_day)
+async def get_time_of_day(message: Message, state: FSMContext):
+    if await deny_if_not_owner(message):
+        return
+
+    time_of_day = TIME_MAP.get(message.text or "")
+    if not time_of_day:
+        await message.answer("Выбери вариант из кнопок.", reply_markup=time_keyboard())
+        return
+
+    await state.update_data(time_of_day=time_of_day, time_label=message.text)
+    await state.set_state(PerfumeForm.season)
+    await message.answer("Какой сезон учитывать?", reply_markup=season_keyboard())
+
+
+@router.message(PerfumeForm.season)
+async def get_season(message: Message, state: FSMContext):
+    if await deny_if_not_owner(message):
+        return
+
+    season = SEASON_MAP.get(message.text or "")
+    if not season:
+        await message.answer("Выбери вариант из кнопок.", reply_markup=season_keyboard())
+        return
+
+    await state.update_data(season=season, season_label=message.text)
     data = await state.get_data()
 
     recommendations = recommend(
@@ -194,6 +271,8 @@ async def get_effect(message: Message, state: FSMContext):
         outfit_text=data["outfit_text"],
         circumstance=data["circumstance"],
         effect=data["effect"],
+        time_of_day=data["time_of_day"],
+        season=data["season"],
         limit=3,
     )
 
@@ -205,59 +284,91 @@ def format_result(data: dict, recommendations: list[dict]) -> str:
     weather = data.get("weather", {})
     temp = weather.get("temperature", "неизвестно")
     rain = weather.get("rain", 0) or weather.get("precipitation", 0)
+    humidity = weather.get("humidity", "неизвестно")
     wind = weather.get("wind_speed", "неизвестно")
 
-    city = data.get("city", "твоя локация")
-    circumstance = data.get("circumstance", "")
-
     lines = [
-        f"Погода: {temp}°C, дождь: {rain}, ветер: {wind} км/ч",
-        f"Локация: {city}",
+        "Топ-3 аромата под ситуацию:",
         "",
-        "Топ-3 аромата:",
+        f"Место: {data.get('place', 'не указано')}",
+        f"Погода: {temp}°C, дождь: {rain}, влажность: {humidity}%, ветер: {wind} км/ч",
+        f"Мероприятие: {data.get('event_label')}",
+        f"Образ: {data.get('outfit_text')}",
+        f"Обстоятельства: {data.get('circumstance_label')}",
+        f"Эффект: {data.get('effect_label')}",
+        f"Время: {data.get('time_label')}",
+        f"Сезон: {data.get('season_label')}",
         "",
     ]
 
     for index, item in enumerate(recommendations, start=1):
         perfume = item["perfume"]
+        sprays = adjust_sprays(perfume.get("sprays", "2–3"), data.get("circumstance", ""), weather)
 
         name = perfume.get("name", "Без названия")
         brand = perfume.get("brand", "")
-        description = perfume.get("description", "Описание не указано.")
+        description = perfume.get("description") or perfume.get("summary") or "Описание не указано."
         best_for = perfume.get("best_for", "Подходит под текущий сценарий.")
         minus = perfume.get("minus", "")
-        sprays = perfume.get("sprays", "2–3")
-        apply = perfume.get("apply", "на шею и грудь")
-        score = item.get("score", 0)
 
-        reasons = item.get("reasons", [])
-        warnings = item.get("warnings", [])
+        lines.extend([
+            f"{index}. {name} — {brand}",
+            f"Баллы: {item.get('score', 0)}",
+            f"Тип: {description}",
+            f"Лучше всего: {best_for}",
+            f"Сколько: {sprays}",
+            f"Куда: {perfume.get('apply', 'на шею и грудь')}",
+            "Почему:",
+        ])
 
-        lines.append(f"{index}. {name} — {brand}")
-        lines.append(f"Оценка: {score}")
-        lines.append(f"Тип: {description}")
-        lines.append(f"Лучше всего: {best_for}")
-        lines.append(f"Сколько: {sprays} пшика")
-        lines.append(f"Куда: {apply}")
+        for reason in item.get("reasons", []):
+            lines.append(f"— {reason}")
 
-        if reasons:
-            lines.append("Почему:")
-            for reason in reasons:
-                lines.append(f"— {reason}")
-
-        if warnings:
+        if item.get("warnings"):
             lines.append("Осторожно:")
-            for warning in warnings:
+            for warning in item.get("warnings", []):
                 lines.append(f"— {warning}")
 
         if minus:
             lines.append(f"Минус: {minus}")
 
-        if circumstance in {"indoor", "small_room", "close_distance"}:
-            lines.append("Совет: из-за помещения или близкой дистанции лучше снизить на 1 пшик.")
-
         lines.append("")
 
+    return "\n".join(lines).strip()
+
+
+def format_layering_result(result: dict) -> str:
+    if not result.get("ok"):
+        return result.get("message", "Не получилось проверить сочетание.")
+
+    first = result["first"]
+    second = result["second"]
+
+    lines = [
+        "Наслаивание:",
+        f"{first.get('name')} — {first.get('brand')}",
+        f"+ {second.get('name')} — {second.get('brand')}",
+        "",
+        f"Вердикт: {result.get('verdict')}",
+        f"Оценка: {result.get('score')}/100",
+        "",
+        "Как наносить:",
+        result.get("order", "Начни с 1+1 пшик и протестируй."),
+        "",
+        "Почему:",
+    ]
+
+    for reason in result.get("reasons", []):
+        lines.append(f"— {reason}")
+
+    if result.get("warnings"):
+        lines.append("")
+        lines.append("Осторожно:")
+        for warning in result.get("warnings", []):
+            lines.append(f"— {warning}")
+
+    lines.append("")
+    lines.append("Правило: не смешивай сразу много. Сначала тест 1+1 пшик и 20–30 минут подождать раскрытие.")
     return "\n".join(lines)
 
 
@@ -269,5 +380,4 @@ dp.include_router(router)
 async def start_polling():
     logging.basicConfig(level=logging.INFO)
     await dp.start_polling(bot)
-
 
