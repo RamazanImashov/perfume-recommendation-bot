@@ -15,3 +15,7 @@ class PerfumeForm(StatesGroup):
 class ManualLayeringForm(StatesGroup):
     first_perfume = State()
     second_perfume = State()
+
+
+class PerfumeListForm(StatesGroup):
+    brand = State()

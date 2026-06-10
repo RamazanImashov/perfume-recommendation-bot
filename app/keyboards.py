@@ -98,3 +98,24 @@ def recommendation_mode_keyboard() -> ReplyKeyboardMarkup:
         ],
         resize_keyboard=True,
     )
+
+
+def perfume_list_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="Все по брендам")],
+            [KeyboardButton(text="Фильтр по бренду")],
+            [KeyboardButton(text="Мужские"), KeyboardButton(text="Женские")],
+            [KeyboardButton(text="Унисекс")],
+            [KeyboardButton(text="Отмена")],
+        ],
+        resize_keyboard=True,
+    )
+
+
+def brand_keyboard(brands: list[str]) -> ReplyKeyboardMarkup:
+    rows = []
+    for i in range(0, len(brands), 2):
+        rows.append([KeyboardButton(text=brand) for brand in brands[i:i + 2]])
+    rows.append([KeyboardButton(text="Отмена")])
+    return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)

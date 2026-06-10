@@ -14,7 +14,9 @@ from app.keyboards import (
     effect_keyboard,
     event_keyboard,
     location_keyboard,
+    brand_keyboard,
     main_keyboard,
+    perfume_list_keyboard,
     recommendation_mode_keyboard,
     remove_keyboard,
     season_keyboard,
@@ -31,7 +33,7 @@ from app.services.recommender import (
     recommend,
 )
 from app.services.weather import get_coordinates, get_weather
-from app.states import ManualLayeringForm, PerfumeForm
+from app.states import ManualLayeringForm, PerfumeForm, PerfumeListForm
 
 
 router = Router()
@@ -71,15 +73,122 @@ async def cancel(message: Message, state: FSMContext):
 
 
 @router.message(F.text == "Все мои парфюмы")
-async def show_all_perfumes(message: Message):
+async def perfume_list_menu(message: Message, state: FSMContext):
     if await deny_if_not_owner(message):
         return
 
-    lines = ["Твои парфюмы:"]
-    for perfume in PERFUMES:
-        lines.append(f"{perfume.get('id', '-')}. {perfume.get('name')} — {perfume.get('brand')}")
+    await state.clear()
+    await message.answer("Как показать список?", reply_markup=perfume_list_keyboard())
 
-    await message.answer("\n".join(lines), reply_markup=main_keyboard())
+
+@router.message(F.text == "Все по брендам")
+async def show_all_perfumes(message: Message, state: FSMContext):
+    if await deny_if_not_owner(message):
+        return
+
+    await state.clear()
+    await _send_perfume_list(message, PERFUMES, "Все парфюмы по брендам")
+
+
+@router.message(F.text == "Фильтр по бренду")
+async def choose_brand_filter(message: Message, state: FSMContext):
+    if await deny_if_not_owner(message):
+        return
+
+    brands = sorted({p.get("brand", "Unknown") for p in PERFUMES})
+    await state.set_state(PerfumeListForm.brand)
+    await message.answer("Выбери бренд.", reply_markup=brand_keyboard(brands))
+
+
+@router.message(PerfumeListForm.brand)
+async def show_by_brand(message: Message, state: FSMContext):
+    if await deny_if_not_owner(message):
+        return
+
+    brand = (message.text or "").strip()
+    brands = {p.get("brand", "Unknown") for p in PERFUMES}
+    if brand not in brands:
+        await message.answer("Выбери бренд из кнопок.", reply_markup=brand_keyboard(sorted(brands)))
+        return
+
+    await state.clear()
+    selected = [p for p in PERFUMES if p.get("brand") == brand]
+    await _send_perfume_list(message, selected, f"Бренд: {brand}")
+
+
+@router.message(F.text.in_({"Мужские", "Женские", "Унисекс"}))
+async def show_by_gender(message: Message, state: FSMContext):
+    if await deny_if_not_owner(message):
+        return
+
+    await state.clear()
+    gender_map = {
+        "Мужские": "men",
+        "Женские": "women",
+        "Унисекс": "unisex",
+    }
+    gender = gender_map[message.text]
+    selected = [p for p in PERFUMES if p.get("gender") == gender]
+    title = message.text
+    await _send_perfume_list(message, selected, title)
+
+
+async def _send_perfume_list(message: Message, perfumes: list[dict], title: str) -> None:
+    text = format_perfume_catalog(perfumes, title)
+    # Telegram message limit is 4096 chars. Split safely by brand blocks.
+    if len(text) <= 3900:
+        await message.answer(text, reply_markup=main_keyboard())
+        return
+
+    chunks = _split_text(text, limit=3800)
+    for chunk in chunks[:-1]:
+        await message.answer(chunk)
+    await message.answer(chunks[-1], reply_markup=main_keyboard())
+
+
+def format_perfume_catalog(perfumes: list[dict], title: str) -> str:
+    if not perfumes:
+        return f"{title}: ничего не найдено.\n\nЕсли ты выбрал «Женские», у тебя сейчас нет отдельного female-only аромата. Есть много unisex."
+
+    sorted_perfumes = sorted(
+        perfumes,
+        key=lambda p: (p.get("brand", ""), p.get("name", "")),
+    )
+
+    lines = [f"{title}: {len(sorted_perfumes)}", ""]
+    current_brand = None
+
+    for perfume in sorted_perfumes:
+        brand = perfume.get("brand", "Unknown")
+        if brand != current_brand:
+            current_brand = brand
+            lines.append(f"{brand}")
+
+        gender = perfume.get("gender", "")
+        gender_label = {"men": "мужской", "women": "женский", "unisex": "унисекс"}.get(gender, gender)
+        lines.append(f"— {perfume.get('name')} ({gender_label})")
+
+    return "\n".join(lines)
+
+
+def _split_text(text: str, limit: int = 3800) -> list[str]:
+    chunks: list[str] = []
+    current: list[str] = []
+    current_len = 0
+
+    for line in text.splitlines():
+        line_len = len(line) + 1
+        if current and current_len + line_len > limit:
+            chunks.append("\n".join(current))
+            current = []
+            current_len = 0
+        current.append(line)
+        current_len += line_len
+
+    if current:
+        chunks.append("\n".join(current))
+
+    return chunks
 
 
 @router.message(F.text == "Подобрать аромат")
