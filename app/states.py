@@ -12,10 +12,24 @@ class PerfumeForm(StatesGroup):
     mode = State()
 
 
+class RecommendationBrowseForm(StatesGroup):
+    active = State()
+
+
 class ManualLayeringForm(StatesGroup):
+    first_brand = State()
     first_perfume = State()
+    second_brand = State()
     second_perfume = State()
 
 
 class PerfumeListForm(StatesGroup):
     brand = State()
+
+
+class WardrobeForm(StatesGroup):
+    add_photo = State()
+    location = State()
+    occasion = State()
+    mood = State()
+    circumstances = State()

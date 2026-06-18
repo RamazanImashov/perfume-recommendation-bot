@@ -11,6 +11,69 @@ FRESH_TAGS = {"fresh", "citrus", "aquatic", "clean", "tea", "light", "blue", "fr
 ROMANTIC_TAGS = {"cherry", "almond", "romantic", "soft", "sweet", "warm"}
 WOODY_TAGS = {"woody", "oud", "smoky", "amber", "patchouli", "vetiver"}
 
+PRESET_LAYERING_PAIRS = [
+    {
+        "first": "Oud Wood",
+        "second": "Imagination",
+        "label": "дорого + чисто",
+        "best_for": "ресторан, встреча, дождь, smart casual",
+    },
+    {
+        "first": "Oud Wood",
+        "second": "Lost Cherry",
+        "label": "дорого + романтично",
+        "best_for": "свидание, бар, близкая дистанция",
+    },
+    {
+        "first": "The Most Wanted Parfum",
+        "second": "Hawas Ice",
+        "label": "вечер + свежий верх",
+        "best_for": "теплый вечер, день рождения, прогулка",
+    },
+    {
+        "first": "Ombré Leather (2018)",
+        "second": "Pacific Chill",
+        "label": "кожа + легкая свежесть",
+        "best_for": "прохладный вечер, темный образ, но без перегруза",
+    },
+    {
+        "first": "Tobacco Vanille",
+        "second": "Oud Wood",
+        "label": "зимняя дорогая база",
+        "best_for": "холод, пальто, ресторан, праздник",
+    },
+    {
+        "first": "Khamrah Qahwa",
+        "second": "Imagination",
+        "label": "кофе + чистый чай",
+        "best_for": "кофейня, холодный день, спокойный образ",
+    },
+    {
+        "first": "Lost Cherry",
+        "second": "Aventus",
+        "label": "вишня + уверенная свежесть",
+        "best_for": "свидание днем/вечером, smart casual",
+    },
+    {
+        "first": "9PM Night Out",
+        "second": "9AM Dive",
+        "label": "клубный сладкий + водная свежесть",
+        "best_for": "вечеринка, теплый вечер, молодая подача",
+    },
+    {
+        "first": "Turathi Blue",
+        "second": "Imagination",
+        "label": "цитрус + чайная чистота",
+        "best_for": "день, учеба, кафе, светлый образ",
+    },
+    {
+        "first": "Liquid Brun",
+        "second": "Pacific Chill",
+        "label": "сладкая база + летняя свежесть",
+        "best_for": "прохладный летний вечер, но не жара и не маленькая комната",
+    },
+]
+
 
 def _tags(perfume: dict) -> set[str]:
     result: set[str] = set()
@@ -179,3 +242,17 @@ def analyze_pair_by_names(first_name: str, second_name: str) -> dict | None:
         return None
 
     return analyze_pair(first, second)
+
+
+def get_preset_layering_pairs() -> list[dict]:
+    results = []
+    for item in PRESET_LAYERING_PAIRS:
+        first = find_perfume(item["first"])
+        second = find_perfume(item["second"])
+        if not first or not second:
+            continue
+        result = analyze_pair(first, second)
+        result["label"] = item.get("label", "")
+        result["best_for"] = item.get("best_for", "")
+        results.append(result)
+    return results

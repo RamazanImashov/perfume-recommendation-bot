@@ -8,8 +8,21 @@ def main_keyboard() -> ReplyKeyboardMarkup:
         keyboard=[
             [KeyboardButton(text="Подобрать аромат")],
             [KeyboardButton(text="Наслаивание вручную")],
+            [KeyboardButton(text="Готовые пары наслаивания")],
             [KeyboardButton(text="Все мои парфюмы")],
+            [KeyboardButton(text="Гардероб")],
             [KeyboardButton(text="Отмена")],
+        ],
+        resize_keyboard=True,
+    )
+
+
+def recommendation_result_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="Другие варианты")],
+            [KeyboardButton(text="Подобрать аромат")],
+            [KeyboardButton(text="Главное меню")],
         ],
         resize_keyboard=True,
     )
@@ -119,3 +132,24 @@ def brand_keyboard(brands: list[str]) -> ReplyKeyboardMarkup:
         rows.append([KeyboardButton(text=brand) for brand in brands[i:i + 2]])
     rows.append([KeyboardButton(text="Отмена")])
     return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
+
+
+def perfume_keyboard(perfumes: list[dict]) -> ReplyKeyboardMarkup:
+    rows = []
+    for perfume in perfumes:
+        rows.append([KeyboardButton(text=f"{perfume.get('name')} — {perfume.get('brand')}")])
+    rows.append([KeyboardButton(text="Отмена")])
+    return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
+
+
+def wardrobe_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="Добавить вещь")],
+            [KeyboardButton(text="Подобрать образ")],
+            [KeyboardButton(text="Список гардероба")],
+            [KeyboardButton(text="Очистить гардероб")],
+            [KeyboardButton(text="Главное меню")],
+        ],
+        resize_keyboard=True,
+    )
