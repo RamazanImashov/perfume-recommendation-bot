@@ -10,7 +10,6 @@ def main_keyboard() -> ReplyKeyboardMarkup:
             [KeyboardButton(text="Наслаивание вручную")],
             [KeyboardButton(text="Готовые пары наслаивания")],
             [KeyboardButton(text="Все мои парфюмы")],
-            [KeyboardButton(text="Гардероб")],
             [KeyboardButton(text="Отмена")],
         ],
         resize_keyboard=True,
@@ -141,15 +140,3 @@ def perfume_keyboard(perfumes: list[dict]) -> ReplyKeyboardMarkup:
     rows.append([KeyboardButton(text="Отмена")])
     return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
 
-
-def wardrobe_keyboard() -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="Добавить вещь")],
-            [KeyboardButton(text="Подобрать образ")],
-            [KeyboardButton(text="Список гардероба")],
-            [KeyboardButton(text="Очистить гардероб")],
-            [KeyboardButton(text="Главное меню")],
-        ],
-        resize_keyboard=True,
-    )

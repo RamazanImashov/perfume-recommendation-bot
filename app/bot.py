@@ -1,5 +1,4 @@
 import asyncio
-import io
 import logging
 
 from aiogram import Bot, Dispatcher, F, Router
@@ -24,7 +23,6 @@ from app.keyboards import (
     remove_keyboard,
     season_keyboard,
     time_keyboard,
-    wardrobe_keyboard,
 )
 from app.services.layering import (
     analyze_pair,
@@ -41,15 +39,7 @@ from app.services.recommender import (
     recommend,
 )
 from app.services.weather import get_coordinates, get_weather
-from app.services.wardrobe import (
-    add_wardrobe_item,
-    analyze_clothing_image,
-    clear_wardrobe,
-    format_wardrobe_list,
-    load_wardrobe,
-    recommend_outfit_with_ai,
-)
-from app.states import ManualLayeringForm, PerfumeForm, PerfumeListForm, RecommendationBrowseForm, WardrobeForm
+from app.states import ManualLayeringForm, PerfumeForm, PerfumeListForm, RecommendationBrowseForm
 
 
 router = Router()
@@ -533,172 +523,6 @@ def format_preset_layering_pairs(pairs: list[dict]) -> str:
             lines.append(f"Когда: {best_for}")
         lines.append("")
     return "\n".join(lines).strip()
-
-
-# ---------- wardrobe ----------
-
-@router.message(F.text == "Гардероб")
-async def wardrobe_menu(message: Message, state: FSMContext):
-    if await deny_if_not_owner(message):
-        return
-    await state.clear()
-    await message.answer("Гардероб: выбери действие.", reply_markup=wardrobe_keyboard())
-
-
-@router.message(F.text == "Добавить вещь")
-async def wardrobe_add_start(message: Message, state: FSMContext):
-    if await deny_if_not_owner(message):
-        return
-    await state.set_state(WardrobeForm.add_photo)
-    await message.answer("Отправь фото одной вещи. В caption можешь написать: бренд, размер, когда носить.", reply_markup=remove_keyboard)
-
-
-@router.message(WardrobeForm.add_photo, F.photo)
-async def wardrobe_add_photo(message: Message, state: FSMContext):
-    if await deny_if_not_owner(message):
-        return
-    photo = message.photo[-1]
-    file = await bot.get_file(photo.file_id)
-    buffer = io.BytesIO()
-    await bot.download_file(file.file_path, destination=buffer)
-    image_bytes = buffer.getvalue()
-
-    item = await analyze_clothing_image(
-        image_bytes=image_bytes,
-        nvidia_api_key=config.nvidia_api_key,
-        nvidia_model=config.nvidia_model,
-        nvidia_base_url=config.nvidia_base_url,
-        user_caption=message.caption or "",
-    )
-    item["telegram_file_id"] = photo.file_id
-
-    try:
-        saved = add_wardrobe_item(item)
-    except Exception as exc:
-        await message.answer(
-            "Не смог сохранить вещь. Если бот на Vercel, нужен внешний storage, потому что файлы не хранятся постоянно.\n"
-            f"Ошибка: {exc}",
-            reply_markup=wardrobe_keyboard(),
-        )
-        return
-
-    await state.clear()
-    colors = ", ".join(saved.get("colors", [])) or "цвет не определен"
-    await message.answer(
-        f"Добавил: {saved.get('category', 'вещь')}\nЦвета: {colors}\nОписание: {saved.get('description', '')[:250]}",
-        reply_markup=wardrobe_keyboard(),
-    )
-
-
-@router.message(WardrobeForm.add_photo)
-async def wardrobe_add_not_photo(message: Message, state: FSMContext):
-    if await deny_if_not_owner(message):
-        return
-    await message.answer("Нужно отправить фото одной вещи.")
-
-
-@router.message(F.text == "Список гардероба")
-async def wardrobe_list(message: Message, state: FSMContext):
-    if await deny_if_not_owner(message):
-        return
-    await state.clear()
-    await message.answer(format_wardrobe_list(load_wardrobe()), reply_markup=wardrobe_keyboard())
-
-
-@router.message(F.text == "Очистить гардероб")
-async def wardrobe_clear(message: Message, state: FSMContext):
-    if await deny_if_not_owner(message):
-        return
-    try:
-        clear_wardrobe()
-        await message.answer("Гардероб очищен.", reply_markup=wardrobe_keyboard())
-    except Exception as exc:
-        await message.answer(f"Не смог очистить гардероб: {exc}", reply_markup=wardrobe_keyboard())
-
-
-@router.message(F.text == "Подобрать образ")
-async def wardrobe_pick_start(message: Message, state: FSMContext):
-    if await deny_if_not_owner(message):
-        return
-    await state.set_state(WardrobeForm.location)
-    await message.answer("Отправь геолокацию или напиши город для погоды.", reply_markup=location_keyboard())
-
-
-@router.message(WardrobeForm.location, F.location)
-async def wardrobe_location_geo(message: Message, state: FSMContext):
-    if await deny_if_not_owner(message):
-        return
-    try:
-        weather = await get_weather(message.location.latitude, message.location.longitude)
-    except Exception:
-        await message.answer("Не смог получить погоду. Напиши город вручную.")
-        return
-    await state.update_data(weather=weather, place="твоя геолокация")
-    await state.set_state(WardrobeForm.occasion)
-    await message.answer("Куда идешь? Например: пары, кафе, прогулка, свидание.", reply_markup=remove_keyboard)
-
-
-@router.message(WardrobeForm.location)
-async def wardrobe_location_text(message: Message, state: FSMContext):
-    if await deny_if_not_owner(message):
-        return
-    city = (message.text or "").strip()
-    if city == "Ввести город вручную":
-        await message.answer("Напиши город текстом.")
-        return
-    try:
-        coordinates = await get_coordinates(city)
-        if not coordinates:
-            await message.answer("Не нашел город. Напиши на английском или отправь геолокацию.")
-            return
-        weather = await get_weather(coordinates["latitude"], coordinates["longitude"])
-    except Exception:
-        await message.answer("Не смог получить погоду.")
-        return
-    place = f"{coordinates['name']}, {coordinates.get('country', '')}".strip().strip(",")
-    await state.update_data(weather=weather, place=place)
-    await state.set_state(WardrobeForm.occasion)
-    await message.answer("Куда идешь? Например: пары, кафе, прогулка, свидание.", reply_markup=remove_keyboard)
-
-
-@router.message(WardrobeForm.occasion)
-async def wardrobe_occasion(message: Message, state: FSMContext):
-    if await deny_if_not_owner(message):
-        return
-    await state.update_data(occasion=(message.text or "обычный день").strip())
-    await state.set_state(WardrobeForm.mood)
-    await message.answer("Какое настроение/эффект? Например: спокойно, дорого, чисто, уверенно.")
-
-
-@router.message(WardrobeForm.mood)
-async def wardrobe_mood(message: Message, state: FSMContext):
-    if await deny_if_not_owner(message):
-        return
-    await state.update_data(mood=(message.text or "обычное").strip())
-    await state.set_state(WardrobeForm.circumstances)
-    await message.answer("Какие обстоятельства? Например: жарко, аудитория, много ходить, свидание вечером.")
-
-
-@router.message(WardrobeForm.circumstances)
-async def wardrobe_circumstances(message: Message, state: FSMContext):
-    if await deny_if_not_owner(message):
-        return
-    await state.update_data(circumstances=(message.text or "").strip())
-    data = await state.get_data()
-    await state.clear()
-
-    result = await recommend_outfit_with_ai(
-        wardrobe_items=load_wardrobe(),
-        weather=data.get("weather", {}),
-        place=data.get("place", "локация"),
-        occasion=data.get("occasion", "обычный день"),
-        mood=data.get("mood", "обычное"),
-        circumstances=data.get("circumstances", ""),
-        nvidia_api_key=config.nvidia_api_key,
-        nvidia_model=config.nvidia_model,
-        nvidia_base_url=config.nvidia_base_url,
-    )
-    await message.answer(result, reply_markup=wardrobe_keyboard())
 
 
 # ---------- helpers ----------

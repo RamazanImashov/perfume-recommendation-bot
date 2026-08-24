@@ -26,8 +26,8 @@ PRESET_LAYERING_PAIRS = [
     },
     {
         "first": "The Most Wanted Parfum",
-        "second": "Hawas Ice",
-        "label": "вечер + свежий верх",
+        "second": "Hawas for Him",
+        "label": "вечер + свежий акватический верх",
         "best_for": "теплый вечер, день рождения, прогулка",
     },
     {

@@ -25,11 +25,3 @@ class ManualLayeringForm(StatesGroup):
 
 class PerfumeListForm(StatesGroup):
     brand = State()
-
-
-class WardrobeForm(StatesGroup):
-    add_photo = State()
-    location = State()
-    occasion = State()
-    mood = State()
-    circumstances = State()
