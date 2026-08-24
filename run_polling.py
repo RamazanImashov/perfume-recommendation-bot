@@ -1,4 +1,5 @@
 import asyncio
+
 from app.bot import start_polling
 
 if __name__ == "__main__":

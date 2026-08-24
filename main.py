@@ -1,50 +1,36 @@
+from __future__ import annotations
+
 import logging
-import os
 
 from aiogram.types import Update
 from fastapi import FastAPI, HTTPException, Request
 
-from app.bot import bot, dp
+from app.bot import bot, config, dp
 
 logging.basicConfig(level=logging.INFO)
-
+logger = logging.getLogger(__name__)
 app = FastAPI()
-
-PUBLIC_URL = os.getenv("PUBLIC_URL")
-WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "perfume-bot-secret")
-WEBHOOK_PATH = f"/webhook/{WEBHOOK_SECRET}"
+WEBHOOK_PATH = f"/webhook/{config.webhook_secret}"
 
 
 @app.get("/")
 async def home():
-    return {
-        "status": "Perfume bot FastAPI is running",
-        "webhook_path": WEBHOOK_PATH,
-    }
+    return {"status": "Perfume bot FastAPI is running", "storage": "redis" if config.redis_rest_url else "memory-fallback"}
 
 
 @app.get("/set-webhook")
 async def set_webhook():
-    if not PUBLIC_URL:
+    if not config.public_url:
         raise HTTPException(status_code=500, detail="PUBLIC_URL is not set")
-
-    webhook_url = f"{PUBLIC_URL}{WEBHOOK_PATH}"
-
-    await bot.delete_webhook(drop_pending_updates=True)
+    webhook_url = f"{config.public_url.rstrip('/')}{WEBHOOK_PATH}"
     await bot.set_webhook(url=webhook_url, drop_pending_updates=True)
     info = await bot.get_webhook_info()
-
-    return {
-        "status": "webhook set",
-        "webhook_url": webhook_url,
-        "telegram_webhook_info": info.model_dump(),
-    }
+    return {"status": "webhook set", "webhook_url": webhook_url, "telegram_webhook_info": info.model_dump()}
 
 
 @app.get("/webhook-info")
 async def webhook_info():
-    info = await bot.get_webhook_info()
-    return info.model_dump()
+    return (await bot.get_webhook_info()).model_dump()
 
 
 @app.get("/delete-webhook")
@@ -60,6 +46,6 @@ async def telegram_webhook(request: Request):
         update = Update.model_validate(data, context={"bot": bot})
         await dp.feed_update(bot, update)
         return {"ok": True}
-    except Exception as error:
-        logging.exception("Webhook error")
-        return {"ok": False, "error": str(error)}
+    except Exception:
+        logger.exception("Webhook update failed")
+        return {"ok": False}

@@ -1803,3 +1803,7 @@ EFFECT_ALIASES = {'чисто': 'clean',
  'ярко': 'bright',
  'тепло': 'warm',
  'уютно': 'cozy'}
+
+# Extended deterministic profile migration layer. Existing fields remain untouched.
+from app.models.perfume import enrich_perfume_database
+PERFUMES = enrich_perfume_database(PERFUMES)
