@@ -23,6 +23,13 @@ PRESET_LAYERING_PAIRS = [
     {"first": "9PM Night Out", "second": "9AM Dive", "label": "сладкий + водная свежесть", "best_for": "вечеринка, теплый вечер", "directional": True},
     {"first": "Turathi Blue", "second": "Imagination", "label": "цитрус + чайная чистота", "best_for": "день, учеба, кафе, светлый образ", "directional": False},
     {"first": "Liquid Brun", "second": "Pacific Chill", "label": "сладкая база + свежий верх", "best_for": "прохладный вечер", "directional": True, "max_temperature": 24},
+    {"first": "Fucking Fabulous", "second": "Molecule 02", "label": "пряная кожа + минеральная прозрачность", "best_for": "прохладный вечер, ресторан, близкая дистанция", "directional": True, "max_temperature": 22},
+    {"first": "Fucking Fabulous", "second": "Lost Cherry", "label": "кожа и миндаль + вишня", "best_for": "свидание, бар, холодный вечер", "directional": True, "max_temperature": 20},
+    {"first": "Fucking Fabulous", "second": "Pacific Chill", "label": "кожа + цитрусовая свежесть", "best_for": "прохладный день, smart casual, встреча", "directional": True, "max_temperature": 23},
+    {"first": "Oud Wood", "second": "Molecule 02", "label": "сухая древесина + минеральный шлейф", "best_for": "встреча, ресторан, минималистичный образ", "directional": True, "max_temperature": 25},
+    {"first": "Ombré Leather (2018)", "second": "Molecule 02", "label": "темная кожа + чистый амбровый верх", "best_for": "прогулка, бар, прохладный вечер", "directional": True, "max_temperature": 22},
+    {"first": "Tobacco Vanille", "second": "Molecule 02", "label": "табачная ваниль + сухая прозрачность", "best_for": "холод, ресторан, праздничный вечер", "directional": True, "max_temperature": 18},
+    {"first": "Lost Cherry", "second": "Molecule 02", "label": "вишня + чистая минеральная база", "best_for": "свидание, кафе, близкая дистанция", "directional": True, "max_temperature": 24},
 ]
 
 FAMILY_COMPATIBILITY: dict[tuple[str, str], float] = {
@@ -30,6 +37,12 @@ FAMILY_COMPATIBILITY: dict[tuple[str, str], float] = {
     ("aquatic", "woody"): 82, ("aquatic", "amber"): 75, ("woody", "gourmand"): 84, ("woody", "fruity"): 82,
     ("woody", "leather"): 84, ("amber", "gourmand"): 82, ("amber", "fruity"): 80, ("fruity", "gourmand"): 79,
     ("spicy", "woody"): 84, ("spicy", "gourmand"): 85, ("tobacco", "woody"): 90, ("floral", "woody"): 78,
+    ("musk", "woody"): 86, ("musk", "amber"): 88, ("musk", "leather"): 82, ("musk", "fruity"): 84,
+    ("musk", "gourmand"): 80, ("musk", "fresh"): 88, ("musk", "floral"): 86, ("musk", "spicy"): 82,
+    ("mineral", "woody"): 88, ("mineral", "amber"): 90, ("mineral", "leather"): 84, ("mineral", "fruity"): 82,
+    ("mineral", "gourmand"): 78, ("mineral", "fresh"): 90, ("mineral", "aquatic"): 88, ("mineral", "tobacco"): 82,
+    ("aromatic", "woody"): 86, ("aromatic", "leather"): 84, ("aromatic", "amber"): 82,
+    ("aromatic", "fresh"): 88, ("aromatic", "spicy"): 84, ("aromatic", "floral"): 80,
 }
 
 
@@ -47,7 +60,11 @@ def _compatibility_by_families(a: PerfumeProfile, b: PerfumeProfile) -> float:
                 scores.append(72.0)
             else:
                 scores.append(FAMILY_COMPATIBILITY.get((fa, fb), FAMILY_COMPATIBILITY.get((fb, fa), 64.0)))
-    return max(scores) if scores else 62.0
+    if not scores:
+        return 62.0
+    # A single matching family must not hide several weak family clashes.
+    # Keep the strongest bridge, but require the rest of the structures to agree too.
+    return 0.65 * max(scores) + 0.35 * (sum(scores) / len(scores))
 
 
 def _note_set(profile: PerfumeProfile, section: str) -> set[str]:
@@ -150,7 +167,7 @@ def analyze_pair_situation(first: dict | PerfumeProfile, second: dict | PerfumeP
     if accords >= 80: reasons.append("аккорды хорошо связываются")
     if bridging >= 70: reasons.append("есть связующие ноты между слоями")
     if freshness_balance >= 75 and density_balance >= 70: reasons.append("свежесть и плотность сбалансированы")
-    if curated: reasons.append("пара отмечена как вручную проверенная")
+    if curated: reasons.append("сочетание включено в отобранные схемы")
     if not reasons: reasons.append("пара приемлемо сбалансирована по сценарию")
     completeness = 0.65 + (0.15 if base.top_notes or base.heart_notes or base.base_notes else 0) + (0.15 if top.top_notes or top.heart_notes or top.base_notes else 0) + (0.05 if curated else 0)
     confidence = clamp(48 + completeness * 35 + max(0, score - 70) * 0.35 - len(warnings) * 7)

@@ -145,6 +145,48 @@ def test_database_validator():
     assert validate_perfumes(PERFUMES, PRESET_LAYERING_PAIRS) == []
 
 
+def test_new_unisex_perfumes_are_in_catalogue():
+    fabulous = find_perfume("Fucking Fabulous")
+    molecule = find_perfume("Molecule 02")
+    assert fabulous and fabulous["brand"] == "Tom Ford" and fabulous["gender"] == "unisex"
+    assert molecule and molecule["brand"] == "Escentric Molecules" and molecule["gender"] == "unisex"
+    assert molecule["notes"]["base"] == ["ambroxan"]
+
+
+@pytest.mark.parametrize(
+    ("base_name", "top_name"),
+    [
+        ("Fucking Fabulous", "Molecule 02"),
+        ("Fucking Fabulous", "Lost Cherry"),
+        ("Oud Wood", "Molecule 02"),
+        ("Ombré Leather (2018)", "Molecule 02"),
+    ],
+)
+def test_new_curated_layering_direction(base_name, top_name):
+    s = build_situation(event="restaurant", outfit_text="рубашка smart casual", circumstance="indoor", effect="expensive", weather=weather(16, 50, is_day=False), manual_time="evening", latitude=42)
+    result = analyze_pair_situation(find_perfume(base_name), find_perfume(top_name), s)
+    assert result.curated is True
+    assert result.application_order == [base_name, top_name]
+    assert result.score >= 55
+
+
+def test_every_catalogue_pair_is_scored_once():
+    s = build_situation(event="casual", outfit_text="clean casual", circumstance="indoor", effect="clean", weather=weather(20, 50), manual_time="day", latitude=42)
+    expected_count = len(PERFUMES) * (len(PERFUMES) - 1) // 2
+    results = recommend_layering_situation(s, expected_count)
+    keys = {(tuple(sorted((item.base_name, item.top_name)))) for item in results}
+    assert len(results) == expected_count
+    assert len(keys) == expected_count
+    assert all(0 <= item.score <= 100 for item in results)
+
+
+def test_fucking_fabulous_is_penalized_in_humid_heat():
+    s = build_situation(event="active", outfit_text="футболка шорты спорт", circumstance="outdoor", effect="clean", weather=weather(34, 85), manual_time="day", latitude=42)
+    result = score_perfume(find_perfume("Fucking Fabulous"), s)
+    assert result.hard_warnings
+    assert result.score < 35
+
+
 def test_personal_feedback_and_recent_wear_penalty():
     from app.services.personalization import build_personal_snapshot
     now = datetime.now().astimezone()

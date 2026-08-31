@@ -119,12 +119,12 @@ def build_perfume_profile(perfume: dict[str, Any]) -> PerfumeProfile:
     occasions = _flatten(perfume.get("occasions"))
     accord_tags = sorted(set(_flatten(perfume.get("type"))))
 
-    fresh = _score_from_tags(tags, {"fresh", "citrus", "aquatic", "clean", "tea", "light", "blue", "fruity", "aromatic"}, 1.4)
+    fresh = _score_from_tags(tags, {"fresh", "citrus", "aquatic", "clean", "tea", "light", "blue", "fruity", "aromatic", "mineral", "ambroxan"}, 1.4)
     sweet = _score_from_tags(tags, {"sweet", "vanilla", "gourmand", "cherry", "coffee", "praline", "rum"}, 1.2)
     warm = _score_from_tags(tags, {"warm", "amber", "spicy", "tobacco", "coffee", "vanilla", "gourmand", "rum"}, 1.4)
     density = _score_from_tags(tags, {"dense", "tobacco", "leather", "oud", "gourmand", "vanilla", "amber", "sweet"}, 1.3)
     darkness = _score_from_tags(tags, {"dark", "leather", "oud", "tobacco", "smoky", "coffee", "amber"}, 1.3)
-    clean = _score_from_tags(tags, {"clean", "fresh", "citrus", "aquatic", "tea", "blue"}, 1.5)
+    clean = _score_from_tags(tags, {"clean", "fresh", "citrus", "aquatic", "tea", "blue", "mineral", "musk", "skin_scent", "ambroxan"}, 1.5)
     formal = _score_from_tags(tags | outfits, {"expensive", "luxury", "woody", "oud", "leather", "formal", "smart_casual", "minimalism", "status"}, 1.5)
     romantic = _score_from_tags(tags, {"romantic", "sexy", "cherry", "sweet", "warm", "soft", "rum"}, 1.2)
     unique = _score_from_tags(tags, {"unusual", "oud", "leather", "tobacco", "cherry", "coffee", "smoky"}, 1.6)
@@ -191,6 +191,8 @@ def build_perfume_profile(perfume: dict[str, Any]) -> PerfumeProfile:
         "gourmand": {"gourmand", "coffee", "vanilla", "praline", "sweet"}, "leather": {"leather"},
         "fruity": {"fruity", "cherry", "apple", "plum", "pear"}, "spicy": {"spicy", "cinnamon", "cardamom", "ginger"},
         "tobacco": {"tobacco"}, "floral": {"floral", "orange_blossom"},
+        "musk": {"musk", "skin_scent"}, "mineral": {"mineral", "ambroxan"},
+        "aromatic": {"aromatic", "lavender", "clary_sage"},
     }
     all_known = tags | set(top_notes) | set(heart_notes) | set(base_notes)
     for family, keys in family_map.items():
