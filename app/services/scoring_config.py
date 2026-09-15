@@ -23,6 +23,13 @@ HARD_PENALTIES = {
 }
 
 CURATED_LAYERING_BONUS = 7.0
+LAYERING_PENALTIES = {
+    "humid_heat_load": 32.0,
+    "heat_load": 26.0,
+    "close_projection": 22.0,
+    "declared_family_conflict": 10.0,
+    "dual_dense_base_indoor": 12.0,
+}
 DIVERSITY_MAX_DROP_SAFE = 12.0
 DIVERSITY_MAX_DROP_EXPRESSIVE = 15.0
 CONFIDENCE_THRESHOLDS = {"high": 76.0, "medium": 55.0}

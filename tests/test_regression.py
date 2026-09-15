@@ -13,11 +13,11 @@ from app.services.situation_parser import build_situation, infer_season, infer_t
 from app.services.validator import validate_perfumes
 from app.services.weather import _closest_hour_index
 
-FRESH = {"Light Blue pour Homme", "Hawas for Him", "Art Of Universe", "Maahir Legacy", "Turathi Blue", "Pacific Chill", "Imagination", "9AM Dive", "Symphony", "Y Eau de Parfum", "Rare Reef"}
-COLD = {"Tobacco Vanille", "Khamrah", "Khamrah Qahwa", "Khamrah Dukhan", "Liquid Brun", "The Most Wanted Parfum", "Stronger With You Absolutely", "Ombré Leather (2018)"}
-DATE = {"Lost Cherry", "The Most Wanted Parfum", "Stronger With You Absolutely", "Oud Wood", "Aventus"}
-FORMAL = {"Oud Wood", "Aventus", "Ombré Leather (2018)", "Tobacco Vanille", "The Most Wanted Parfum"}
-HEAVY = {"Tobacco Vanille", "Khamrah", "Khamrah Qahwa", "Khamrah Dukhan", "Liquid Brun", "9PM Elixir"}
+FRESH = {"Light Blue pour Homme", "Hawas for Him", "Art Of Universe", "Maahir Legacy", "Turathi Blue", "Pacific Chill", "Imagination", "9AM Dive", "Symphony", "Y Eau de Parfum", "Rare Reef", "Molecule 02", "Wild Vetiver"}
+COLD = {"Tobacco Vanille", "Khamrah", "Khamrah Qahwa", "Khamrah Dukhan", "Liquid Brun", "The Most Wanted Parfum", "Stronger With You Absolutely", "Ombré Leather (2018)", "Ombre Nomade", "By the Fireplace", "Black Phantom", "Jump Up And Kiss Me Hedonistic (2021)"}
+DATE = {"Lost Cherry", "The Most Wanted Parfum", "Stronger With You Absolutely", "Oud Wood", "Aventus", "Black Phantom", "Jump Up And Kiss Me Hedonistic (2021)"}
+FORMAL = {"Oud Wood", "Aventus", "Ombré Leather (2018)", "Tobacco Vanille", "The Most Wanted Parfum", "Ombre Nomade", "Jump Up And Kiss Me Hedonistic (2021)", "Wild Vetiver"}
+HEAVY = {"Tobacco Vanille", "Khamrah", "Khamrah Qahwa", "Khamrah Dukhan", "Liquid Brun", "9PM Elixir", "Ombre Nomade", "By the Fireplace", "Black Phantom", "Jump Up And Kiss Me Hedonistic (2021)"}
 
 
 def weather(temp, humidity=55, rain=0, cloud=40, wind=5, is_day=True):
@@ -38,7 +38,7 @@ cores = [
     ("rain-meeting", 11, 78, "meeting", "рубашка пальто темные брюки smart casual", "indoor", "expensive", FORMAL | {"Imagination"}, set(), "day"),
     ("morning-study", 18, 50, "study", "светлая рубашка джинсы clean casual", "indoor", "clean", FRESH, {"Tobacco Vanille"}, "morning"),
     ("night-club", 17, 60, "club", "черная кожаная куртка джинсы streetwear", "club", "noticeable", {"9PM Night Out", "9PM Elixir", "The Most Wanted Parfum", "9PM"}, set(), "night"),
-    ("small-room", 19, 55, "casual", "серый свитер джинсы casual", "small_room", "calm", {"Oud Wood", "Imagination", "Rare Reef", "Fakhar Black"}, {"9PM Elixir"}, "evening"),
+    ("small-room", 19, 55, "casual", "серый свитер джинсы casual", "small_room", "calm", {"Oud Wood", "Imagination", "Rare Reef", "Fakhar Black", "Molecule 01", "Molecule 02"}, {"9PM Elixir"}, "evening"),
     ("formal-meeting", 16, 52, "meeting", "черный пиджак белая рубашка брюки formal", "indoor", "expensive", FORMAL, set(), "day"),
     ("summer-walk", 27, 48, "walk", "льняная белая рубашка светлые брюки кроссовки", "outdoor", "clean", FRESH, {"Tobacco Vanille", "Khamrah"}, "day"),
 ]
@@ -185,6 +185,65 @@ def test_fucking_fabulous_is_penalized_in_humid_heat():
     result = score_perfume(find_perfume("Fucking Fabulous"), s)
     assert result.hard_warnings
     assert result.score < 35
+
+
+def test_six_new_perfumes_have_valid_explicit_profiles():
+    expected = {
+        "Ombre Nomade", "By the Fireplace", "Black Phantom", "Molecule 01",
+        "Jump Up And Kiss Me Hedonistic (2021)", "Wild Vetiver",
+    }
+    found = {item["name"] for item in PERFUMES if item["name"] in expected}
+    assert found == expected
+    assert len(PERFUMES) == 39
+    assert score_perfume(find_perfume("Ombre Nomade"), build_situation(event="restaurant", outfit_text="formal", circumstance="outdoor", effect="expensive", weather=weather(10), manual_time="evening", latitude=42)).score > 60
+    assert find_perfume("Wild Vetiver")["gender"] == "unisex"
+
+
+def test_explicit_numeric_profile_overrides_legacy_inference():
+    from app.models.perfume import build_perfume_profile
+    profile = build_perfume_profile(find_perfume("Ombre Nomade"))
+    assert profile.density == 4.8
+    assert profile.projection == 5.0
+    assert profile.restaurant_score == 4.9
+    assert profile.layer_role == "base"
+
+
+def test_outfit_parser_keeps_color_with_its_garment():
+    profile = parse_outfit_profile("Белая рубашка, бежевые широкие брюки, темно-синие лоферы, кожаная куртка")
+    assert profile.top_type == "shirt" and profile.top_color == "white"
+    assert profile.bottom_type == "trousers" and profile.bottom_color == "beige"
+    assert profile.shoes_type == "loafers" and profile.shoes_color == "blue"
+    assert profile.fit == "wide"
+    assert profile.outerwear == ["leather_jacket"]
+    assert profile.style == ["smart_casual"]
+
+
+@pytest.mark.parametrize(
+    ("base_name", "top_name"),
+    [
+        ("Ombre Nomade", "Molecule 01"),
+        ("By the Fireplace", "Molecule 02"),
+        ("Black Phantom", "Molecule 01"),
+        ("Jump Up And Kiss Me Hedonistic (2021)", "Molecule 02"),
+        ("Oud Wood", "Wild Vetiver"),
+    ],
+)
+def test_new_layering_presets_are_directional_and_safe(base_name, top_name):
+    situation = build_situation(event="restaurant", outfit_text="рубашка брюки smart casual", circumstance="indoor", effect="expensive", weather=weather(12, 50, is_day=False), manual_time="evening", latitude=42)
+    result = analyze_pair_situation(find_perfume(base_name), find_perfume(top_name), situation)
+    assert result.curated is True
+    assert result.application_order == [base_name, top_name]
+    assert result.score >= 55
+    if top_name in {"Molecule 01", "Molecule 02"}:
+        assert f"{top_name}: 1 пш." in result.spray_plan
+
+
+def test_new_dense_perfumes_lose_in_humid_heat():
+    situation = build_situation(event="active", outfit_text="футболка шорты спорт", circumstance="outdoor", effect="clean", weather=weather(34, 85), manual_time="day", latitude=42)
+    for name in ("Ombre Nomade", "Black Phantom", "Jump Up And Kiss Me Hedonistic (2021)"):
+        result = score_perfume(find_perfume(name), situation)
+        assert result.hard_warnings
+        assert result.score < 30
 
 
 def test_personal_feedback_and_recent_wear_penalty():

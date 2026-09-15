@@ -147,6 +147,9 @@ def build_perfume_profile(perfume: dict[str, Any]) -> PerfumeProfile:
         top_notes = _flatten(notes.get("top"))
         heart_notes = _flatten(notes.get("heart") or notes.get("middle"))
         base_notes = _flatten(notes.get("base"))
+    top_notes = _flatten(perfume.get("top_notes")) or top_notes
+    heart_notes = _flatten(perfume.get("heart_notes")) or heart_notes
+    base_notes = _flatten(perfume.get("base_notes")) or base_notes
 
     event_scores = {key: 2.2 for key in EVENT_SCORE_KEYS}
     for old in occasions:
@@ -193,6 +196,8 @@ def build_perfume_profile(perfume: dict[str, Any]) -> PerfumeProfile:
         "tobacco": {"tobacco"}, "floral": {"floral", "orange_blossom"},
         "musk": {"musk", "skin_scent"}, "mineral": {"mineral", "ambroxan"},
         "aromatic": {"aromatic", "lavender", "clary_sage"},
+        "green": {"green", "vetiver", "moss", "mate"}, "resinous": {"resinous", "benzoin", "labdanum", "balsam"},
+        "powdery": {"powdery", "orris", "iris"},
     }
     all_known = tags | set(top_notes) | set(heart_notes) | set(base_notes)
     for family, keys in family_map.items():
@@ -212,19 +217,41 @@ def build_perfume_profile(perfume: dict[str, Any]) -> PerfumeProfile:
     close = _clamp5(4.4 - max(0.0, projection - 2.5) * 0.9 - max(0.0, density - 3.0) * 0.4)
     humidity_pref = _clamp5(2.5 + (fresh - density) * 0.45)
 
+    def number5(key: str, derived: float) -> float:
+        value = perfume.get(key, derived)
+        return _clamp5(float(value))
+
+    def temperature(key: str, derived: float) -> float:
+        return float(perfume.get(key, derived))
+
+    explicit_effects = perfume.get("effects_profile")
+    if isinstance(explicit_effects, dict):
+        effects_profile = {str(key): _clamp5(float(value)) for key, value in explicit_effects.items()}
+    explicit_seasons = perfume.get("season_scores")
+    if isinstance(explicit_seasons, dict):
+        season_scores = {str(key): _clamp5(float(value)) for key, value in explicit_seasons.items()}
+    explicit_families = _flatten(perfume.get("layer_families"))
+    explicit_conflicts = _flatten(perfume.get("layer_conflicts"))
+
     return PerfumeProfile(
         id=perfume.get("id"), brand=str(perfume.get("brand", "")), name=str(perfume.get("name", "")), gender=str(perfume.get("gender", "unisex")),
-        main_accords=accord_tags, top_notes=top_notes, heart_notes=heart_notes, base_notes=base_notes,
-        freshness=fresh, sweetness=sweet, warmth=warm, density=density, darkness=darkness, cleanliness=clean,
-        formality=formal, romantic=romantic, uniqueness=unique, projection=projection, longevity=longevity,
-        ideal_temperature=ideal, comfortable_temperature_min=cmin, comfortable_temperature_max=cmax,
-        hard_temperature_min=hard_min, hard_temperature_max=hard_max, humidity_preference=humidity_pref,
-        indoor_score=indoor, outdoor_score=outdoor, close_distance_score=close,
-        morning_score=time_scores["morning"], day_score=time_scores["day"], evening_score=time_scores["evening"], night_score=time_scores["night"],
+        main_accords=_flatten(perfume.get("main_accords")) or accord_tags, top_notes=top_notes, heart_notes=heart_notes, base_notes=base_notes,
+        freshness=number5("freshness", fresh), sweetness=number5("sweetness", sweet), warmth=number5("warmth", warm),
+        density=number5("density", density), darkness=number5("darkness", darkness), cleanliness=number5("cleanliness", clean),
+        formality=number5("formality", formal), romantic=number5("romantic", romantic), uniqueness=number5("uniqueness", unique),
+        projection=number5("projection", projection), longevity=number5("longevity", longevity),
+        ideal_temperature=temperature("ideal_temperature", ideal), comfortable_temperature_min=temperature("comfortable_temperature_min", cmin),
+        comfortable_temperature_max=temperature("comfortable_temperature_max", cmax), hard_temperature_min=temperature("hard_temperature_min", hard_min),
+        hard_temperature_max=temperature("hard_temperature_max", hard_max), humidity_preference=number5("humidity_preference", humidity_pref),
+        indoor_score=number5("indoor_score", indoor), outdoor_score=number5("outdoor_score", outdoor),
+        close_distance_score=number5("close_distance_score", close),
+        morning_score=number5("morning_score", time_scores["morning"]), day_score=number5("day_score", time_scores["day"]),
+        evening_score=number5("evening_score", time_scores["evening"]), night_score=number5("night_score", time_scores["night"]),
         effects_profile={k: _clamp5(v) for k, v in effects_profile.items()}, season_scores=season_scores,
-        layer_role=layer_role, layer_families=sorted(families), layer_conflicts=[], sprays=str(perfume.get("sprays", "2–3")),
+        layer_role=str(perfume.get("layer_role", layer_role)), layer_families=explicit_families or sorted(families),
+        layer_conflicts=explicit_conflicts, sprays=str(perfume.get("sprays", "2–3")),
         base_sprays_min=smin, base_sprays_max=smax, apply=str(perfume.get("apply", "")), legacy=perfume,
-        **{EVENT_SCORE_KEYS[k]: _clamp5(v) for k, v in event_scores.items()},
+        **{EVENT_SCORE_KEYS[k]: number5(EVENT_SCORE_KEYS[k], v) for k, v in event_scores.items()},
     )
 
 

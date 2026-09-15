@@ -63,4 +63,6 @@ def recommend_layering_sprays(base: PerfumeProfile, top: PerfumeProfile, situati
             top_count, base_count = 1, max(1, max_load - 1)
     else:
         base_count, top_count = base_advice.count, top_advice.count
+    if {"iso_e_super", "ambroxan"} & set(top.base_notes):
+        top_count = 1
     return f"{base.name}: {base_count} пш.; {top.name}: {top_count} пш."

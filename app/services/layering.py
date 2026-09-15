@@ -8,7 +8,7 @@ from app.models.recommendation import LayeringResult
 from app.models.situation import Situation
 from app.services.recommender import find_perfume, recommend_situation
 from app.services.scoring import clamp, hard_constraints, score_perfume as score_profile
-from app.services.scoring_config import CURATED_LAYERING_BONUS, LAYERING_WEIGHTS
+from app.services.scoring_config import CURATED_LAYERING_BONUS, LAYERING_PENALTIES, LAYERING_WEIGHTS
 from app.services.situation_parser import build_situation
 from app.services.spray_advisor import recommend_layering_sprays
 
@@ -30,6 +30,17 @@ PRESET_LAYERING_PAIRS = [
     {"first": "Ombré Leather (2018)", "second": "Molecule 02", "label": "темная кожа + чистый амбровый верх", "best_for": "прогулка, бар, прохладный вечер", "directional": True, "max_temperature": 22},
     {"first": "Tobacco Vanille", "second": "Molecule 02", "label": "табачная ваниль + сухая прозрачность", "best_for": "холод, ресторан, праздничный вечер", "directional": True, "max_temperature": 18},
     {"first": "Lost Cherry", "second": "Molecule 02", "label": "вишня + чистая минеральная база", "best_for": "свидание, кафе, близкая дистанция", "directional": True, "max_temperature": 24},
+    {"first": "Ombre Nomade", "second": "Molecule 01", "label": "дымный уд + бархатистая древесность", "best_for": "холодный вечер, ресторан, улица", "directional": True, "max_temperature": 18},
+    {"first": "Ombre Nomade", "second": "Imagination", "label": "уд + чайно-цитрусовый верх", "best_for": "прохладный вечер, встреча, ресторан", "directional": True, "max_temperature": 20},
+    {"first": "By the Fireplace", "second": "Molecule 01", "label": "дымный каштан + мягкая древесная аура", "best_for": "холод, прогулка, кофейня", "directional": True, "max_temperature": 18},
+    {"first": "By the Fireplace", "second": "Molecule 02", "label": "каштан и ваниль + минеральная сухость", "best_for": "прохладный вечер, помещение", "directional": True, "max_temperature": 18},
+    {"first": "Black Phantom", "second": "Molecule 01", "label": "ром и кофе + бархатистая древесность", "best_for": "холодный вечер, бар, свидание", "directional": True, "max_temperature": 17},
+    {"first": "Black Phantom", "second": "Molecule 02", "label": "темный гурманский профиль + сухой амбровый верх", "best_for": "холод, ресторан, вечер", "directional": True, "max_temperature": 16},
+    {"first": "Jump Up And Kiss Me Hedonistic (2021)", "second": "Molecule 01", "label": "вишня и табак + мягкая древесность", "best_for": "свидание, ресторан, строгий образ", "directional": True, "max_temperature": 19},
+    {"first": "Jump Up And Kiss Me Hedonistic (2021)", "second": "Molecule 02", "label": "темная вишня + минеральная прозрачность", "best_for": "прохладный вечер, близкая дистанция", "directional": True, "max_temperature": 18},
+    {"first": "Wild Vetiver", "second": "Molecule 01", "label": "зеленый ветивер + древесная аура", "best_for": "день, встреча, прогулка", "directional": False, "max_temperature": 29},
+    {"first": "Wild Vetiver", "second": "Molecule 02", "label": "ветивер + чистая минеральная свежесть", "best_for": "теплый день, ресторан, smart casual", "directional": False, "max_temperature": 30},
+    {"first": "Oud Wood", "second": "Wild Vetiver", "label": "сухая древесина + зеленый ветивер", "best_for": "встреча, ресторан, нейтральный образ", "directional": True, "max_temperature": 25},
 ]
 
 FAMILY_COMPATIBILITY: dict[tuple[str, str], float] = {
@@ -43,7 +54,23 @@ FAMILY_COMPATIBILITY: dict[tuple[str, str], float] = {
     ("mineral", "gourmand"): 78, ("mineral", "fresh"): 90, ("mineral", "aquatic"): 88, ("mineral", "tobacco"): 82,
     ("aromatic", "woody"): 86, ("aromatic", "leather"): 84, ("aromatic", "amber"): 82,
     ("aromatic", "fresh"): 88, ("aromatic", "spicy"): 84, ("aromatic", "floral"): 80,
+    ("green", "fresh"): 90, ("green", "woody"): 88, ("green", "floral"): 84, ("green", "aromatic"): 88,
+    ("resinous", "woody"): 88, ("resinous", "amber"): 90, ("resinous", "smoky"): 86,
+    ("powdery", "floral"): 86, ("powdery", "woody"): 80, ("powdery", "fruity"): 78,
 }
+
+NOTE_GROUPS = {
+    "citrus": {"bergamot", "lemon", "lime", "mandarin", "grapefruit", "orange_blossom"},
+    "fruit": {"raspberry", "black_cherry", "cherry", "blackcurrant_bud", "apple", "pear", "plum"},
+    "wood": {"oud", "sandalwood", "cedarwood", "guaiac_wood", "cashmeran", "cashmere_wood", "amberwood", "iso_e_super", "vetiver"},
+    "amber_resin": {"amber", "ambroxan", "benzoin", "labdanum", "peru_balsam", "incense"},
+    "gourmand": {"vanilla", "tonka_bean", "caramel", "coffee", "chestnut", "sugar_cane", "praline"},
+    "spice": {"pink_pepper", "clove", "clary_sage", "timur_berry", "cinnamon", "cardamom"},
+    "floral": {"rose_centifolia", "rose", "geranium", "jasmine", "orris", "orange_blossom"},
+    "dark": {"tobacco", "leather", "cade", "smoke", "rum"},
+    "musk": {"musk", "muscone", "ambroxan", "iso_e_super"},
+}
+ENHANCER_NOTES = {"iso_e_super", "ambroxan"}
 
 
 def _pair_key(a: str, b: str) -> tuple[str, str]:
@@ -77,10 +104,21 @@ def _note_compatibility(base: PerfumeProfile, top: PerfumeProfile) -> tuple[floa
     if not all_a or not all_b:
         return 60.0, 55.0
     overlap = len(all_a & all_b)
-    note_score = clamp(58 + overlap * 10)
+    groups_a = {group for group, notes in NOTE_GROUPS.items() if all_a & notes}
+    groups_b = {group for group, notes in NOTE_GROUPS.items() if all_b & notes}
+    related = len(groups_a & groups_b)
+    note_score = clamp(55 + overlap * 9 + related * 5)
     bridges = len(_note_set(base, "heart_notes") & (_note_set(top, "top_notes") | _note_set(top, "heart_notes")))
     bridges += len(_note_set(base, "base_notes") & _note_set(top, "heart_notes"))
-    return note_score, clamp(52 + bridges * 14)
+    bridge_groups = len(
+        {group for group, notes in NOTE_GROUPS.items() if _note_set(base, "base_notes") & notes}
+        & {group for group, notes in NOTE_GROUPS.items() if (_note_set(top, "top_notes") | _note_set(top, "heart_notes")) & notes}
+    )
+    bridge_score = clamp(50 + bridges * 13 + bridge_groups * 6)
+    if all_b & ENHANCER_NOTES:
+        note_score = max(note_score, 78.0)
+        bridge_score = max(bridge_score, 76.0)
+    return note_score, bridge_score
 
 
 def _choose_base_top(a: PerfumeProfile, b: PerfumeProfile) -> tuple[PerfumeProfile, PerfumeProfile]:
@@ -148,14 +186,21 @@ def analyze_pair_situation(first: dict | PerfumeProfile, second: dict | PerfumeP
     hard_penalty = 0.0
     combined_load = base.density + top.density + 0.45 * (base.warmth + top.warmth) + 0.35 * (base.sweetness + top.sweetness)
     if situation.temperature >= 30 and (situation.humidity or 0) >= 70 and combined_load >= 9.5:
-        hard_penalty += 32
+        hard_penalty += LAYERING_PENALTIES["humid_heat_load"]
         warnings.append("слишком плотная пара для влажной жары")
     elif situation.temperature >= 30 and combined_load >= 11.5:
-        hard_penalty += 26
+        hard_penalty += LAYERING_PENALTIES["heat_load"]
         warnings.append("слишком плотная пара для жары")
     if situation.circumstance in {"small_room", "close_distance"} and (base.projection + top.projection) >= 8.0:
-        hard_penalty += 22
+        hard_penalty += LAYERING_PENALTIES["close_projection"]
         warnings.append("слишком высокая общая проекция для близкой дистанции")
+    declared_conflicts = (set(base.layer_conflicts) & set(top.layer_families)) | (set(top.layer_conflicts) & set(base.layer_families))
+    if declared_conflicts:
+        hard_penalty += LAYERING_PENALTIES["declared_family_conflict"]
+        warnings.append("есть конфликт семейств: " + ", ".join(sorted(declared_conflicts)))
+    if base.layer_role == top.layer_role == "base" and base.density + top.density >= 8.4 and situation.circumstance in {"indoor", "small_room", "close_distance"}:
+        hard_penalty += LAYERING_PENALTIES["dual_dense_base_indoor"]
+        warnings.append("два плотных базовых аромата перегружают помещение")
     curated = _curated(base, top)
     curated_bonus = 0.0
     if curated:

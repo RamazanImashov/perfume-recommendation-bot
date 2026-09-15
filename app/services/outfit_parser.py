@@ -25,7 +25,10 @@ STYLE_PATTERNS = {
     "formal": r"строг|formal|костюм|галстук", "sport": r"спорт|sport|athleisure", "streetwear": r"streetwear|стрит|оверсайз|oversize",
     "clean_casual": r"clean\s*casual|чист.*кэжуал|минимал", "casual": r"casual|кэжуал",
 }
-FIT_PATTERNS = {"oversize": r"оверсайз|oversize", "slim": r"облега|slim|skinny", "regular": r"regular|обычн.*посад"}
+FIT_PATTERNS = {
+    "oversize": r"оверсайз|oversize", "wide": r"широк|свободн(?:ая|ые|ый|ого)?\s+посад|wide|loose",
+    "slim": r"облега|slim|skinny", "regular": r"regular|обычн.*посад",
+}
 
 
 def _matches(text: str, patterns: dict[str, str]) -> list[str]:
@@ -33,14 +36,29 @@ def _matches(text: str, patterns: dict[str, str]) -> list[str]:
 
 
 def _nearest_color(text: str, garment_pattern: str) -> str | None:
-    # Capture a small context around the garment, then resolve the first color there.
     match = re.search(garment_pattern, text, flags=re.I)
     if not match:
         return None
-    start, end = max(0, match.start() - 28), min(len(text), match.end() + 18)
-    context = text[start:end]
-    colors = _matches(context, COLOR_PATTERNS)
-    return colors[0] if colors else None
+    # Resolve color inside the same comma-separated garment clause first. This
+    # prevents a previous item's color from leaking into trousers or shoes.
+    left = max(text.rfind(",", 0, match.start()), text.rfind(";", 0, match.start()), text.rfind("\n", 0, match.start())) + 1
+    right_candidates = [pos for token in (",", ";", "\n") if (pos := text.find(token, match.end())) >= 0]
+    right = min(right_candidates) if right_candidates else len(text)
+    candidates: list[tuple[int, str]] = []
+    for name, pattern in COLOR_PATTERNS.items():
+        for color_match in re.finditer(pattern, text[left:right], flags=re.I):
+            absolute = left + color_match.start()
+            candidates.append((abs(absolute - match.start()), name))
+    if candidates:
+        return min(candidates)[1]
+
+    # Text without punctuation still gets the nearest color, not the first one.
+    start, end = max(0, match.start() - 32), min(len(text), match.end() + 24)
+    for name, pattern in COLOR_PATTERNS.items():
+        for color_match in re.finditer(pattern, text[start:end], flags=re.I):
+            absolute = start + color_match.start()
+            candidates.append((abs(absolute - match.start()), name))
+    return min(candidates)[1] if candidates else None
 
 
 def parse_outfit_profile(text: str) -> OutfitProfile:
@@ -93,7 +111,9 @@ def parse_outfit_profile(text: str) -> OutfitProfile:
     top_type = next((g for g in ("shirt", "polo", "tshirt", "hoodie", "sweater", "knit") if g in garments), None)
     bottom_type = next((g for g in ("jeans", "trousers", "shorts") if g in garments), None)
     shoes_type = next((g for g in ("sneakers", "boots", "loafers", "shoes") if g in garments), None)
-    outerwear = [g for g in ("leather_jacket", "jacket", "coat", "blazer") if g in garments]
+    outerwear = [g for g in ("leather_jacket", "coat", "blazer") if g in garments]
+    if "jacket" in garments and "leather_jacket" not in garments:
+        outerwear.append("jacket")
 
     legacy = set(colors) | set(garments) | set(materials) | set(styles)
     if palette in {"dark", "light", "monochrome"}:

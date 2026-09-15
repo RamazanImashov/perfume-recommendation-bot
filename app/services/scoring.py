@@ -128,12 +128,28 @@ def outfit_score(profile: PerfumeProfile, situation: Situation) -> tuple[float, 
     if "smart_casual" in outfit.style and profile.formality >= 3.1: style_hits += 1
     if "formal" in outfit.style and profile.formality >= 4.0: style_hits += 1
     if "sport" in outfit.style and profile.freshness >= 3.5 and profile.density <= 3.2: style_hits += 1
-    style = clamp(55 + style_hits * 18 - (12 if "sport" in outfit.style and profile.density >= 4 else 0))
+    style_targets = {
+        "casual": 2.2, "clean_casual": 2.8, "smart_casual": 3.5, "business_casual": 4.0,
+        "formal": 4.7, "sport": 1.2, "streetwear": 2.0,
+    }
+    target_formality = max((style_targets.get(item, outfit.formality) for item in outfit.style), default=outfit.formality)
+    structural_style = clamp(100 - abs(profile.formality - target_formality) * 18)
+    if "clean_casual" in outfit.style:
+        structural_style = structural_style * 0.65 + profile.cleanliness * 7
+    elif "streetwear" in outfit.style:
+        structural_style = structural_style * 0.72 + profile.uniqueness * 5.6
+    elif "sport" in outfit.style:
+        structural_style = structural_style * 0.55 + profile.freshness * 9 - profile.density * 5
+    exact_style = clamp(55 + style_hits * 18 - (12 if "sport" in outfit.style and profile.density >= 4 else 0))
+    style = clamp(exact_style * 0.45 + structural_style * 0.55)
     formal = clamp(100 - abs(profile.formality - outfit.formality) * 20)
     if outfit.palette == "dark": palette = clamp(55 + profile.darkness * 9)
     elif outfit.palette == "light": palette = clamp(55 + profile.cleanliness * 8 + profile.freshness * 3)
     elif outfit.palette == "monochrome": palette = clamp(60 + profile.formality * 6)
-    else: palette = 68.0
+    elif outfit.palette == "colorful":
+        palette = clamp(52 + profile.uniqueness * 7 + profile.freshness * 3)
+    else:
+        palette = clamp(55 + profile.formality * 4 + profile.cleanliness * 2.5)
     material = 65.0
     if "leather" in outfit.materials:
         material = 90.0 if "leather" in profile.main_accords or profile.darkness >= 3.6 else 58.0
@@ -142,12 +158,25 @@ def outfit_score(profile: PerfumeProfile, situation: Situation) -> tuple[float, 
     elif "linen" in outfit.materials:
         material = clamp(58 + profile.freshness * 8 - profile.density * 3)
     garment_hits = len(set(outfit.garments) & legacy_outfits)
-    garment = clamp(58 + garment_hits * 15)
+    garment = 58 + garment_hits * 12
+    polished_items = len(set(outfit.garments) & {"shirt", "trousers", "loafers", "shoes", "blazer"})
+    if polished_items >= 2:
+        garment += max(0.0, 16 - abs(profile.formality - 3.7) * 8)
+    if "leather_jacket" in outfit.outerwear:
+        garment += 14 if "leather" in profile.main_accords else max(0.0, profile.darkness + profile.uniqueness - 5.0) * 3
+    if outfit.fit in {"wide", "oversize"}:
+        garment += max(0.0, profile.uniqueness - 2.5) * 3
+    garment = clamp(garment)
     total = style * 0.35 + formal * 0.30 + palette * 0.15 + material * 0.10 + garment * 0.10
     evidence = []
     if style >= 78: evidence.append("стилистически совпадает с образом")
     if formal >= 80: evidence.append("формальность аромата соответствует одежде")
-    if material >= 82 and "leather" in outfit.materials: evidence.append("кожаный материал поддержан характером аромата")
+    if material >= 82 and "leather" in outfit.materials and "leather" in profile.main_accords:
+        evidence.append("кожаный аккорд сочетается с кожаной верхней одеждой")
+    elif material >= 82 and "leather" in outfit.materials:
+        evidence.append("тёмный характер сочетается с кожаной верхней одеждой")
+    if garment >= 80 and polished_items >= 2:
+        evidence.append("формальный уровень подходит рубашке, брюкам и обуви")
     elif palette >= 82: evidence.append(f"хорошо сочетается с {outfit.palette} палитрой")
     return clamp(total), evidence
 
