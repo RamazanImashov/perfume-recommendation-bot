@@ -254,14 +254,33 @@ def analyze_pair_by_names(first_name: str, second_name: str) -> dict | None:
     return analyze_pair(first, second) if first and second else None
 
 
-def get_preset_layering_pairs() -> list[dict]:
+def get_preset_layering_pairs(situation: Situation | None = None) -> list[dict]:
     results = []
-    neutral = {"temperature": 16, "humidity": 50, "rain": 0, "precipitation": 0, "cloud_cover": 50, "wind_speed": 5, "is_day": False}
+    if situation is None:
+        neutral = {"temperature": 16, "humidity": 50, "rain": 0, "precipitation": 0, "cloud_cover": 50, "wind_speed": 5, "is_day": False}
+        situation = build_situation(
+            event="restaurant", outfit_text="smart casual", circumstance="indoor", effect="expensive",
+            weather=neutral, manual_time="evening",
+        )
     for item in PRESET_LAYERING_PAIRS:
         first, second = find_perfume(item["first"]), find_perfume(item["second"])
         if not first or not second: continue
-        result = analyze_pair(first, second, weather=neutral, event="restaurant", circumstance="indoor", effect="expensive", time_of_day="evening")
-        result["label"] = item.get("label", "")
-        result["best_for"] = item.get("best_for", "")
-        results.append(result)
+        scored = analyze_pair_situation(first, second, situation)
+        results.append({
+            "score": scored.score,
+            "confidence": scored.confidence,
+            "confidence_label": scored.confidence_label,
+            "base": find_perfume(scored.base_name),
+            "top": find_perfume(scored.top_name),
+            "reasons": scored.reasons,
+            "warnings": scored.warnings,
+            "apply": scored.spray_plan,
+            "subscores": scored.subscores,
+            "curated": scored.curated,
+            "result": scored,
+            "situation": situation.model_dump(mode="json"),
+            "label": item.get("label", ""),
+            "best_for": item.get("best_for", ""),
+        })
+    results.sort(key=lambda value: (-value["score"], value["base"]["name"], value["top"]["name"]))
     return results

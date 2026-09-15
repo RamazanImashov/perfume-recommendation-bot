@@ -26,6 +26,7 @@ from app.keyboards import (
     main_keyboard,
     perfume_keyboard,
     perfume_list_keyboard,
+    preset_layering_keyboard,
     recommendation_mode_keyboard,
     recommendation_result_keyboard,
     remove_keyboard,
@@ -33,14 +34,13 @@ from app.keyboards import (
     target_time_keyboard,
     time_keyboard,
 )
-from app.models.perfume import build_perfume_profile
+from app.models.perfume import EVENT_SCORE_KEYS, build_perfume_profile
 from app.models.recommendation import FeedbackRecord
 from app.models.situation import Situation
 from app.services.ai_client import AIClient
 from app.services.explanations import comparison_reason, explanation_lines, risk_line
 from app.services.history import OwnerHistory
 from app.services.layering import (
-    analyze_pair,
     analyze_pair_situation,
     get_preset_layering_pairs,
     recommend_layering_situation,
@@ -58,9 +58,9 @@ from app.services.recommender import (
     recommend_situation,
 )
 from app.services.scoring import score_perfume as score_profile
-from app.services.situation_parser import build_situation, parse_free_text
+from app.services.situation_parser import build_situation
 from app.services.weather import get_coordinates, get_weather
-from app.states import CompareForm, FreeTextForm, ManualLayeringForm, PerfumeForm, PerfumeListForm, RecommendationBrowseForm, ReverseForm, WhyNotForm
+from app.states import PerfumeForm, PerfumeListForm, PresetLayeringBrowseForm, RecommendationBrowseForm, ReverseForm, WhyNotForm
 from app.storage import create_fsm_storage, create_personal_storage
 
 logger = logging.getLogger(__name__)
@@ -364,6 +364,10 @@ async def manual_target_time(message: Message, state: FSMContext):
 async def get_advanced(message: Message, state: FSMContext):
     if await deny_if_not_owner(message): return
     if message.text == "Авто — продолжить":
+        data = await state.get_data()
+        if data.get("reverse_perfume_id") is not None:
+            await _finish_reverse_with_situation(message, state, _situation_from_data(data))
+            return
         await state.set_state(PerfumeForm.mode)
         await message.answer("Что подобрать?", reply_markup=recommendation_mode_keyboard()); return
     if message.text == "Настроить вручную":
@@ -395,6 +399,10 @@ async def get_exposure(message: Message, state: FSMContext):
     mapping = {"Авто": None, "Мало улицы": "low", "Средне": "medium", "Много улицы": "high"}
     if message.text not in mapping: await message.answer("Выбери вариант.", reply_markup=exposure_keyboard()); return
     await state.update_data(outdoor_exposure=mapping[message.text])
+    data = await state.get_data()
+    if data.get("reverse_perfume_id") is not None:
+        await _finish_reverse_with_situation(message, state, _situation_from_data(data))
+        return
     await state.set_state(PerfumeForm.mode)
     await message.answer("Что подобрать?", reply_markup=recommendation_mode_keyboard())
 
@@ -509,7 +517,7 @@ def format_layering_results(situation: Situation, results, start_index: int = 1,
     return "\n".join(lines).strip()
 
 
-# ---------- fast repeat / free text ----------
+# ---------- repeat last ----------
 
 @router.message(F.text == "Как в прошлый раз")
 async def repeat_last(message: Message, state: FSMContext):
@@ -529,43 +537,6 @@ async def repeat_last(message: Message, state: FSMContext):
     payload = {"mode": "Обычный парфюм", "situation": situation.model_dump(mode="json"), "items": [r.model_dump(mode="json") for r in results]}
     await state.set_state(RecommendationBrowseForm.active)
     await state.update_data(recommendation_context=payload, recommendation_offset=3)
-    await message.answer(format_perfume_results(situation, results), reply_markup=recommendation_result_keyboard())
-
-
-@router.message(F.text == "Быстрый запрос")
-async def fast_query_start(message: Message, state: FSMContext):
-    if await deny_if_not_owner(message): return
-    await state.set_state(FreeTextForm.text)
-    await message.answer("Напиши всё одной фразой: событие, погода/температура, одежда, помещение и желаемый эффект.", reply_markup=remove_keyboard)
-
-
-@router.message(FreeTextForm.text)
-async def fast_query(message: Message, state: FSMContext):
-    if await deny_if_not_owner(message): return
-    text = (message.text or "").strip()
-    previous_location = await history.get_last_location() if history.enabled else None
-    parsed = parse_free_text(text, latitude=(previous_location or {}).get("latitude"), timezone=(previous_location or {}).get("timezone"))
-    weather = None
-    place = (previous_location or {}).get("place", "")
-    if parsed.get("temperature") is not None:
-        weather = {"temperature": parsed["temperature"], "feels_like": parsed["temperature"], "humidity": parsed.get("humidity"), "rain": 0, "precipitation": 0, "cloud_cover": 40, "wind_speed": 5, "is_day": parsed["time_of_day"] in {"morning", "day"}, "source": "user_text"}
-    elif previous_location:
-        try:
-            weather = await get_weather(previous_location["latitude"], previous_location["longitude"], parsed["target_datetime"], previous_location.get("timezone"))
-        except Exception:
-            weather = None
-    if weather is None:
-        await state.clear()
-        await message.answer("Для быстрого запроса укажи температуру или сначала сохрани локацию обычным подбором.", reply_markup=main_keyboard()); return
-    base = build_situation(event=parsed["event"], outfit_text=text, circumstance=parsed["circumstance"], effect=parsed["effect"], weather=weather, place=place, target_datetime=parsed["target_datetime"], latitude=(previous_location or {}).get("latitude"), longitude=(previous_location or {}).get("longitude"), timezone=(previous_location or {}).get("timezone"))
-    ai_situation = await ai_client.parse_situation(text, base) if ai_client.enabled else None
-    situation = ai_situation or base
-    results = await _ordinary_results(situation, 3, await _personal_snapshot())
-    payload = {"mode": "Обычный парфюм", "situation": situation.model_dump(mode="json"), "items": [r.model_dump(mode="json") for r in results]}
-    await state.set_state(RecommendationBrowseForm.active)
-    await state.update_data(recommendation_context=payload, recommendation_offset=3)
-    if history.enabled:
-        await history.save_last_situation(situation.model_dump(mode="json")); await history.save_last_recommendation(payload)
     await message.answer(format_perfume_results(situation, results), reply_markup=recommendation_result_keyboard())
 
 
@@ -625,73 +596,54 @@ async def feedback_tags(message: Message, state: FSMContext):
     await message.answer(text, reply_markup=main_keyboard())
 
 
-# ---------- manual/preset layering ----------
+# ---------- preset layering ----------
 
-@router.message(F.text == "Наслаивание вручную")
-async def manual_layering_start(message: Message, state: FSMContext):
-    if await deny_if_not_owner(message): return
-    await state.set_state(ManualLayeringForm.first_brand)
-    await message.answer("Бренд первого аромата.", reply_markup=brand_keyboard(_brands()))
+PRESET_PAGE_SIZE = 6
 
 
-@router.message(ManualLayeringForm.first_brand)
-async def manual_first_brand(message: Message, state: FSMContext):
-    perfumes = _perfumes_by_brand((message.text or "").strip())
-    if not perfumes: await message.answer("Выбери бренд из кнопок.", reply_markup=brand_keyboard(_brands())); return
-    await state.set_state(ManualLayeringForm.first_perfume)
-    await message.answer("Первый аромат.", reply_markup=perfume_keyboard(perfumes))
-
-
-@router.message(ManualLayeringForm.first_perfume)
-async def manual_first_perfume(message: Message, state: FSMContext):
-    perfume = _perfume_from_label(message.text or "")
-    if not perfume: await message.answer("Выбери аромат из кнопок."); return
-    await state.update_data(first_perfume_id=perfume.get("id"))
-    await state.set_state(ManualLayeringForm.second_brand)
-    await message.answer("Бренд второго аромата.", reply_markup=brand_keyboard(_brands()))
-
-
-@router.message(ManualLayeringForm.second_brand)
-async def manual_second_brand(message: Message, state: FSMContext):
-    perfumes = _perfumes_by_brand((message.text or "").strip())
-    if not perfumes: await message.answer("Выбери бренд из кнопок.", reply_markup=brand_keyboard(_brands())); return
-    await state.set_state(ManualLayeringForm.second_perfume)
-    await message.answer("Второй аромат.", reply_markup=perfume_keyboard(perfumes))
-
-
-@router.message(ManualLayeringForm.second_perfume)
-async def manual_second_perfume(message: Message, state: FSMContext):
-    second = _perfume_from_label(message.text or "")
-    first = _perfume_by_id((await state.get_data()).get("first_perfume_id"))
-    await state.clear()
-    if not first or not second or first.get("id") == second.get("id"):
-        await message.answer("Нужны два разных аромата.", reply_markup=main_keyboard()); return
-    last = await history.get_last_situation() if history.enabled else None
-    if last:
-        result = analyze_pair_situation(first, second, Situation.model_validate(last))
-        text = f"{result.base_name} + {result.top_name}\n{result.score:.0f}/100 · Уверенность: {result.confidence_label}\nКак: {result.spray_plan}"
-        if result.reasons: text += "\nПочему: " + "; ".join(result.reasons[:2]) + "."
-        if result.warnings: text += "\nРиск: " + result.warnings[0] + "."
-    else:
-        result = analyze_pair(first, second)
-        text = f"{result['base']['name']} + {result['top']['name']}\n{result['score']:.0f}/100\nКак: {result['apply']}"
-    await message.answer(text, reply_markup=main_keyboard())
+def _format_preset_page(pairs: list[dict], offset: int) -> str:
+    page = pairs[offset:offset + PRESET_PAGE_SIZE]
+    if not page:
+        return "Больше готовых пар нет."
+    lines = [f"Готовые пары {offset + 1}–{offset + len(page)} из {len(pairs)}:", ""]
+    for index, item in enumerate(page, offset + 1):
+        lines += [
+            f"{index}. {item['base']['name']} + {item['top']['name']}",
+            f"Оценка: {item['score']:.0f}/100",
+            f"Идея: {item.get('label', '')}",
+            f"Когда: {item.get('best_for', '')}",
+            f"Как: {item.get('apply', '')}",
+            "",
+        ]
+    return "\n".join(lines).strip()
 
 
 @router.message(F.text == "Готовые пары наслаивания")
 async def preset_layering(message: Message, state: FSMContext):
     if await deny_if_not_owner(message): return
-    await state.clear()
-    pairs = get_preset_layering_pairs()
-    lines = ["Готовые пары:", ""]
-    for i, item in enumerate(pairs, 1):
-        lines += [f"{i}. {item['base']['name']} + {item['top']['name']}", f"Идея: {item.get('label','')}", f"Когда: {item.get('best_for','')}", ""]
-    await message.answer("\n".join(lines).strip(), reply_markup=main_keyboard())
+    situation = await _require_last_situation(message, state, notify=False)
+    pairs = get_preset_layering_pairs(situation)
+    await state.set_state(PresetLayeringBrowseForm.active)
+    await state.update_data(preset_offset=PRESET_PAGE_SIZE, preset_situation=situation.model_dump(mode="json") if situation else None)
+    await message.answer(_format_preset_page(pairs, 0), reply_markup=preset_layering_keyboard(len(pairs) > PRESET_PAGE_SIZE))
 
 
-# ---------- compare / why not / reverse ----------
+@router.message(PresetLayeringBrowseForm.active, F.text == "Ещё готовые пары")
+async def more_preset_layering(message: Message, state: FSMContext):
+    if await deny_if_not_owner(message): return
+    data = await state.get_data()
+    offset = int(data.get("preset_offset", 0))
+    raw_situation = data.get("preset_situation")
+    situation = Situation.model_validate(raw_situation) if raw_situation else None
+    pairs = get_preset_layering_pairs(situation)
+    await state.update_data(preset_offset=offset + PRESET_PAGE_SIZE)
+    has_more = offset + PRESET_PAGE_SIZE < len(pairs)
+    await message.answer(_format_preset_page(pairs, offset), reply_markup=preset_layering_keyboard(has_more))
 
-async def _require_last_situation(message: Message, state: FSMContext | None = None) -> Situation | None:
+
+# ---------- why not / reverse ----------
+
+async def _require_last_situation(message: Message, state: FSMContext | None = None, *, notify: bool = True) -> Situation | None:
     if state is not None:
         data = await state.get_data()
         context = data.get("recommendation_context")
@@ -699,65 +651,10 @@ async def _require_last_situation(message: Message, state: FSMContext | None = N
             return Situation.model_validate(context["situation"])
     saved = await history.get_last_situation() if history.enabled else None
     if not saved:
-        await message.answer("Сначала сделай обычный подбор — нужен текущий контекст.", reply_markup=main_keyboard())
+        if notify:
+            await message.answer("Сначала сделай обычный подбор — нужен текущий контекст.", reply_markup=main_keyboard())
         return None
     return Situation.model_validate(saved)
-
-
-@router.message(F.text == "Сравнить ароматы")
-async def compare_start(message: Message, state: FSMContext):
-    if await deny_if_not_owner(message): return
-    if not await _require_last_situation(message, state): return
-    await state.set_state(CompareForm.first_brand)
-    await message.answer("Бренд первого аромата.", reply_markup=brand_keyboard(_brands()))
-
-
-@router.message(CompareForm.first_brand)
-async def compare_first_brand(message: Message, state: FSMContext):
-    ps = _perfumes_by_brand(message.text or "")
-    if not ps: return
-    await state.set_state(CompareForm.first_perfume); await message.answer("Первый аромат.", reply_markup=perfume_keyboard(ps))
-
-
-@router.message(CompareForm.first_perfume)
-async def compare_first_perfume(message: Message, state: FSMContext):
-    p = _perfume_from_label(message.text or "")
-    if not p: return
-    await state.update_data(compare_first_id=p["id"]); await state.set_state(CompareForm.second_brand)
-    await message.answer("Бренд второго аромата.", reply_markup=brand_keyboard(_brands()))
-
-
-@router.message(CompareForm.second_brand)
-async def compare_second_brand(message: Message, state: FSMContext):
-    ps = _perfumes_by_brand(message.text or "")
-    if not ps: return
-    await state.set_state(CompareForm.second_perfume); await message.answer("Второй аромат.", reply_markup=perfume_keyboard(ps))
-
-
-@router.message(CompareForm.second_perfume)
-async def compare_second_perfume(message: Message, state: FSMContext):
-    data = await state.get_data()
-    second = _perfume_from_label(message.text or ""); first = _perfume_by_id(data.get("compare_first_id"))
-    situation = await _require_last_situation(message, state)
-    await state.clear()
-    if not first or not second or not situation: return
-    snapshot = await _personal_snapshot(); a = score_profile(first, situation, snapshot); b = score_profile(second, situation, snapshot)
-    winner = a if a.score >= b.score else b
-    pa, pb = build_perfume_profile(first), build_perfume_profile(second)
-    def row(label, av, bv): return f"{label}: {av:.0f} / {bv:.0f}"
-    lines = [
-        f"{a.name} vs {b.name}",
-        row("Общий", a.score, b.score),
-        row("Погода", a.breakdown.climate_score, b.breakdown.climate_score),
-        row("Событие", a.breakdown.event_score, b.breakdown.event_score),
-        row("Образ", a.breakdown.outfit_score, b.breakdown.outfit_score),
-        row("Окружение", a.breakdown.environment_score, b.breakdown.environment_score),
-        row("Эффект", a.breakdown.effect_score, b.breakdown.effect_score),
-        row("Проекция", pa.projection * 20, pb.projection * 20),
-        f"Риск: {risk_line(a)} / {risk_line(b)}",
-        "",
-    ] + comparison_reason(a, b) + ["", f"Выбор: {winner.name}."]
-    await message.answer("\n".join(lines), reply_markup=main_keyboard())
 
 
 @router.message(F.text == "Почему не этот аромат?")
@@ -788,36 +685,100 @@ async def why_perfume(message: Message, state: FSMContext):
 @router.message(F.text == "Хочу надеть конкретный аромат")
 async def reverse_start(message: Message, state: FSMContext):
     if await deny_if_not_owner(message): return
-    if not await _require_last_situation(message, state): return
     await state.set_state(ReverseForm.brand); await message.answer("Выбери бренд.", reply_markup=brand_keyboard(_brands()))
 
 
 @router.message(ReverseForm.brand)
 async def reverse_brand(message: Message, state: FSMContext):
     ps = _perfumes_by_brand(message.text or "")
-    if not ps: return
+    if not ps:
+        await message.answer("Выбери бренд из кнопок.", reply_markup=brand_keyboard(_brands()))
+        return
     await state.set_state(ReverseForm.perfume); await message.answer("Выбери аромат.", reply_markup=perfume_keyboard(ps))
+
+
+def _best_profile_time(profile) -> str:
+    values = {
+        "утро": profile.morning_score, "день": profile.day_score,
+        "вечер": profile.evening_score, "ночь": profile.night_score,
+    }
+    return max(values, key=values.get)
+
+
+def _best_profile_event(profile) -> str:
+    labels = {
+        "study": "учёба", "work": "работа", "meeting": "встреча", "walk": "прогулка",
+        "cafe": "кафе", "date": "свидание", "restaurant": "ресторан", "party": "вечеринка",
+        "club": "клуб", "birthday": "день рождения", "active": "активный день", "casual": "обычный день",
+    }
+    event = max(EVENT_SCORE_KEYS, key=lambda key: getattr(profile, EVENT_SCORE_KEYS[key]))
+    return labels[event]
+
+
+def _adaptation_advice(result, profile, situation: Situation) -> str:
+    temp = situation.feels_like if situation.feels_like is not None else situation.temperature
+    if temp > profile.comfortable_temperature_max:
+        return "Перенеси на вечер, нанеси 1 пшик на грудь под одежду и избегай тесного помещения."
+    if temp < profile.comfortable_temperature_min:
+        return "Нанеси на кожу под одежду. Для улицы добавь один пшик на затылок."
+    if situation.circumstance in {"small_room", "close_distance"} and profile.projection >= 3.8:
+        return "Оставь 1 пшик на груди под одеждой. Не наноси на переднюю часть шеи."
+    if situation.outdoor_exposure == "high" and profile.projection <= 3.2:
+        return "Добавь один пшик на затылок или верхнюю одежду с расстояния."
+    if result.score < 60:
+        return f"Сократи нанесение до 1 пшика и используй ближе к периоду «{_best_profile_time(profile)}»."
+    return "Используй рекомендованную дозировку без дополнительного усиления."
+
+
+async def _finish_reverse_with_situation(message: Message, state: FSMContext, situation: Situation) -> None:
+    data = await state.get_data()
+    perfume = _perfume_by_id(data.get("reverse_perfume_id"))
+    if not perfume:
+        await state.clear()
+        await message.answer("Не нашёл выбранный аромат. Выбери его ещё раз.", reply_markup=main_keyboard())
+        return
+    snapshot = await _personal_snapshot()
+    result = score_profile(perfume, situation, snapshot)
+    profile = build_perfume_profile(perfume)
+    pairs = [
+        analyze_pair_situation(perfume, other, situation, snapshot)
+        for other in PERFUMES if other.get("id") != perfume.get("id")
+    ]
+    pairs.sort(key=lambda item: (-item.score, item.base_name, item.top_name))
+    lines = [
+        f"{result.name}: {result.score:.0f}/100",
+        f"Лучшее время: {_best_profile_time(profile)}",
+        f"Лучший сценарий: {_best_profile_event(profile)}",
+        f"Как: {result.spray_count} пш. — {', '.join(result.spray_locations)}",
+        f"Главный риск: {risk_line(result)}.",
+        f"Адаптация: {_adaptation_advice(result, profile, situation)}",
+    ]
+    if pairs:
+        lines.append("Подходящие наслоения:")
+        lines.extend(f"{index}. {pair.base_name} + {pair.top_name}, {pair.score:.0f}/100, {pair.spray_plan}" for index, pair in enumerate(pairs[:3], 1))
+    await state.clear()
+    await message.answer("\n".join(lines), reply_markup=main_keyboard())
 
 
 @router.message(ReverseForm.perfume)
 async def reverse_perfume(message: Message, state: FSMContext):
     perfume = _perfume_from_label(message.text or "")
-    situation = await _require_last_situation(message, state)
+    if not perfume:
+        await message.answer("Выбери аромат из кнопок.")
+        return
+    situation = await _require_last_situation(message, state, notify=False)
+    await state.update_data(reverse_perfume_id=perfume.get("id"))
+    if situation:
+        await _finish_reverse_with_situation(message, state, situation)
+        return
     await state.clear()
-    if not perfume or not situation: return
-    result = score_profile(perfume, situation, await _personal_snapshot())
-    profile_name = result.name
-    pairs = []
-    for other in PERFUMES:
-        if other["name"] == profile_name: continue
-        pair = analyze_pair_situation(perfume, other, situation)
-        pairs.append(pair)
-    pairs.sort(key=lambda x: -x.score)
-    best_time = max(("morning", perfume.get("morning_score", 2.5)), ("day", perfume.get("day_score", 2.5)), ("evening", perfume.get("evening_score", 2.5)), ("night", perfume.get("night_score", 2.5)), key=lambda x: x[1])[0]
-    lines = [f"{profile_name}: {result.score:.0f}/100", f"Лучшее время: {best_time}", f"Как: {result.spray_count} пш. — {', '.join(result.spray_locations)}", f"Главный риск: {risk_line(result)}."]
-    if result.score < 60: lines.append("Адаптация: сократи дозировку и смести использование ближе к его лучшему времени/помещению.")
-    lines.append("Наслаивание: " + "; ".join(f"{p.base_name}+{p.top_name} ({p.score:.0f})" for p in pairs[:2]))
-    await message.answer("\n".join(lines), reply_markup=main_keyboard())
+    await state.update_data(reverse_perfume_id=perfume.get("id"))
+    await state.set_state(PerfumeForm.location)
+    previous = await history.get_last_location() if history.enabled else None
+    await message.answer(
+        "Для точной оценки нужны погода, событие и образ. Отправь геолокацию или напиши город.",
+        reply_markup=location_keyboard(bool(previous)),
+    )
 
 
 # ---------- debug ----------

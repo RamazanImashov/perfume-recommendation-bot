@@ -5,7 +5,7 @@ from datetime import datetime
 import pytest
 
 from app.data.perfumes import PERFUMES
-from app.services.layering import PRESET_LAYERING_PAIRS, analyze_pair_situation, recommend_layering_situation
+from app.services.layering import PRESET_LAYERING_PAIRS, analyze_pair_situation, get_preset_layering_pairs, recommend_layering_situation
 from app.services.outfit_parser import parse_outfit_profile
 from app.services.recommender import find_perfume, recommend_situation
 from app.services.scoring import score_perfume
@@ -288,3 +288,28 @@ def test_deterministic_same_input_same_output():
     a = [(x.name, x.score) for x in recommend_situation(s, 10, diversity=False)]
     b = [(x.name, x.score) for x in recommend_situation(s, 10, diversity=False)]
     assert a == b
+
+
+def _keyboard_texts(markup):
+    return [button.text for row in markup.keyboard for button in row]
+
+
+def test_removed_modes_are_absent_from_keyboards():
+    from app.keyboards import main_keyboard, recommendation_result_keyboard
+    removed = {"Сравнить ароматы", "Наслаивание вручную", "Быстрый запрос"}
+    assert removed.isdisjoint(_keyboard_texts(main_keyboard()))
+    assert removed.isdisjoint(_keyboard_texts(recommendation_result_keyboard()))
+
+
+def test_preset_layering_has_more_than_one_page_and_context_sorting():
+    situation = build_situation(event="restaurant", outfit_text="рубашка брюки smart casual", circumstance="indoor", effect="expensive", weather=weather(12, 50, is_day=False), manual_time="evening", latitude=42)
+    pairs = get_preset_layering_pairs(situation)
+    assert len(pairs) > 6
+    assert [item["score"] for item in pairs] == sorted((item["score"] for item in pairs), reverse=True)
+    assert all(item["apply"] for item in pairs)
+
+
+def test_preset_layering_more_button_can_be_hidden():
+    from app.keyboards import preset_layering_keyboard
+    assert "Ещё готовые пары" in _keyboard_texts(preset_layering_keyboard(True))
+    assert "Ещё готовые пары" not in _keyboard_texts(preset_layering_keyboard(False))

@@ -20,22 +20,8 @@ class RecommendationBrowseForm(StatesGroup):
     active = State()
 
 
-class ManualLayeringForm(StatesGroup):
-    first_brand = State()
-    first_perfume = State()
-    second_brand = State()
-    second_perfume = State()
-
-
 class PerfumeListForm(StatesGroup):
     brand = State()
-
-
-class CompareForm(StatesGroup):
-    first_brand = State()
-    first_perfume = State()
-    second_brand = State()
-    second_perfume = State()
 
 
 class ReverseForm(StatesGroup):
@@ -48,8 +34,8 @@ class WhyNotForm(StatesGroup):
     perfume = State()
 
 
-class FreeTextForm(StatesGroup):
-    text = State()
+class PresetLayeringBrowseForm(StatesGroup):
+    active = State()
 
 
 class FeedbackForm(StatesGroup):

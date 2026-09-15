@@ -7,10 +7,10 @@ remove_keyboard = ReplyKeyboardRemove()
 
 def main_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(keyboard=[
-        [KeyboardButton(text="Подобрать аромат"), KeyboardButton(text="Быстрый запрос")],
+        [KeyboardButton(text="Подобрать аромат")],
         [KeyboardButton(text="Хочу надеть конкретный аромат")],
-        [KeyboardButton(text="Сравнить ароматы"), KeyboardButton(text="Почему не этот аромат?")],
-        [KeyboardButton(text="Наслаивание вручную"), KeyboardButton(text="Готовые пары наслаивания")],
+        [KeyboardButton(text="Почему не этот аромат?")],
+        [KeyboardButton(text="Готовые пары наслаивания")],
         [KeyboardButton(text="Все мои парфюмы")],
         [KeyboardButton(text="Как в прошлый раз")],
         [KeyboardButton(text="Отмена")],
@@ -21,9 +21,17 @@ def recommendation_result_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(keyboard=[
         [KeyboardButton(text="Другие варианты")],
         [KeyboardButton(text="Как прошло?")],
-        [KeyboardButton(text="Почему не этот аромат?"), KeyboardButton(text="Сравнить ароматы")],
+        [KeyboardButton(text="Почему не этот аромат?")],
         [KeyboardButton(text="Подобрать аромат"), KeyboardButton(text="Главное меню")],
     ], resize_keyboard=True)
+
+
+def preset_layering_keyboard(has_more: bool = True) -> ReplyKeyboardMarkup:
+    rows = []
+    if has_more:
+        rows.append([KeyboardButton(text="Ещё готовые пары")])
+    rows.append([KeyboardButton(text="Главное меню")])
+    return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
 
 
 def location_keyboard(has_previous: bool = False) -> ReplyKeyboardMarkup:
