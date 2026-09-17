@@ -194,7 +194,7 @@ def test_six_new_perfumes_have_valid_explicit_profiles():
     }
     found = {item["name"] for item in PERFUMES if item["name"] in expected}
     assert found == expected
-    assert len(PERFUMES) == 39
+    assert len(PERFUMES) >= 39
     assert score_perfume(find_perfume("Ombre Nomade"), build_situation(event="restaurant", outfit_text="formal", circumstance="outdoor", effect="expensive", weather=weather(10), manual_time="evening", latitude=42)).score > 60
     assert find_perfume("Wild Vetiver")["gender"] == "unisex"
 

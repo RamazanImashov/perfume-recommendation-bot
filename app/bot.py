@@ -478,7 +478,7 @@ async def more_recommendations(message: Message, state: FSMContext):
         context.setdefault("items", []).extend(r.model_dump(mode="json") for r in results)
     else:
         displayed = {tuple(sorted((item.get("base_name", ""), item.get("top_name", "")))) for item in context.get("items", [])}
-        all_results = recommend_layering_situation(situation, min(465, offset + 12), snapshot)
+        all_results = recommend_layering_situation(situation, min(len(PERFUMES) * (len(PERFUMES) - 1) // 2, offset + 12), snapshot)
         results = [r for r in all_results if tuple(sorted((r.base_name, r.top_name))) not in displayed][:3]
         text = format_layering_results(situation, results, start_index=offset + 1, title="Другие пары")
         context.setdefault("items", []).extend(r.model_dump(mode="json") for r in results)

@@ -11,6 +11,7 @@ class PerfumeProfile(BaseModel):
     name: str
     gender: str = "unisex"
     main_accords: list[str] = Field(default_factory=list)
+    known_notes: list[str] = Field(default_factory=list)
     top_notes: list[str] = Field(default_factory=list)
     heart_notes: list[str] = Field(default_factory=list)
     base_notes: list[str] = Field(default_factory=list)
@@ -235,6 +236,7 @@ def build_perfume_profile(perfume: dict[str, Any]) -> PerfumeProfile:
 
     return PerfumeProfile(
         id=perfume.get("id"), brand=str(perfume.get("brand", "")), name=str(perfume.get("name", "")), gender=str(perfume.get("gender", "unisex")),
+        known_notes=_flatten(perfume.get("known_notes")),
         main_accords=_flatten(perfume.get("main_accords")) or accord_tags, top_notes=top_notes, heart_notes=heart_notes, base_notes=base_notes,
         freshness=number5("freshness", fresh), sweetness=number5("sweetness", sweet), warmth=number5("warmth", warm),
         density=number5("density", density), darkness=number5("darkness", darkness), cleanliness=number5("cleanliness", clean),

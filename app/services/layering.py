@@ -43,6 +43,67 @@ PRESET_LAYERING_PAIRS = [
     {"first": "Oud Wood", "second": "Wild Vetiver", "label": "сухая древесина + зеленый ветивер", "best_for": "встреча, ресторан, нейтральный образ", "directional": True, "max_temperature": 25},
 ]
 
+PRESET_LAYERING_PAIRS.extend([{'first': 'Stronger With You Powerfully',
+  'second': 'Molecule 01',
+  'label': 'Вишня, каштан, лаванда, специи и амбровая древесина + Iso E Super',
+  'best_for': 'Прохладный вечер, свидание, ресторан.',
+  'directional': True,
+  'max_temperature': 18},
+ {'first': 'Stronger With You Powerfully',
+  'second': 'Molecule 02',
+  'label': 'Вишня, каштан, лаванда, специи и амбровая древесина + Ambroxan',
+  'best_for': 'Прохладный вечер, свидание, ресторан.',
+  'directional': True,
+  'max_temperature': 18},
+ {'first': 'Born in Roma Uomo Extradose',
+  'second': 'Molecule 01',
+  'label': 'Лавандин, ветивер, гваяк, цитрусы и пряные аккорды + Iso E Super',
+  'best_for': 'Прохладный вечер, свидание, ресторан.',
+  'directional': True,
+  'max_temperature': 24},
+ {'first': 'Born in Roma Uomo Extradose',
+  'second': 'Molecule 02',
+  'label': 'Лавандин, ветивер, гваяк, цитрусы и пряные аккорды + Ambroxan',
+  'best_for': 'Прохладный вечер, свидание, ресторан.',
+  'directional': True,
+  'max_temperature': 24},
+ {'first': 'Narcotic Delight',
+  'second': 'Molecule 01',
+  'label': 'Вишня, коньяк, ваниль, табак, перец и гедион + Iso E Super',
+  'best_for': 'Прохладный вечер, свидание, ресторан.',
+  'directional': True,
+  'max_temperature': 20},
+ {'first': 'Narcotic Delight',
+  'second': 'Molecule 02',
+  'label': 'Вишня, коньяк, ваниль, табак, перец и гедион + Ambroxan',
+  'best_for': 'Прохладный вечер, свидание, ресторан.',
+  'directional': True,
+  'max_temperature': 20},
+ {'first': 'Bitter Peach',
+  'second': 'Molecule 01',
+  'label': 'Персик, красный апельсин, давана, лабданум, пачули и сандал + Iso E Super',
+  'best_for': 'Прохладный вечер, свидание, ресторан.',
+  'directional': True,
+  'max_temperature': 23},
+ {'first': 'Bitter Peach',
+  'second': 'Molecule 02',
+  'label': 'Персик, красный апельсин, давана, лабданум, пачули и сандал + Ambroxan',
+  'best_for': 'Прохладный вечер, свидание, ресторан.',
+  'directional': True,
+  'max_temperature': 23},
+ {'first': 'Gentle Fluidity Silver',
+  'second': 'Molecule 01',
+  'label': 'Можжевельник, мускатный орех, кориандр, мускус и амбровая древесина + Iso E Super',
+  'best_for': 'Работа, встреча, светлый smart casual.',
+  'directional': True,
+  'max_temperature': 29},
+ {'first': 'Gentle Fluidity Silver',
+  'second': 'Molecule 02',
+  'label': 'Можжевельник, мускатный орех, кориандр, мускус и амбровая древесина + Ambroxan',
+  'best_for': 'Работа, встреча, светлый smart casual.',
+  'directional': True,
+  'max_temperature': 29}])
+
 FAMILY_COMPATIBILITY: dict[tuple[str, str], float] = {
     ("fresh", "woody"): 88, ("fresh", "amber"): 80, ("fresh", "gourmand"): 68, ("fresh", "leather"): 72,
     ("aquatic", "woody"): 82, ("aquatic", "amber"): 75, ("woody", "gourmand"): 84, ("woody", "fruity"): 82,
@@ -60,14 +121,14 @@ FAMILY_COMPATIBILITY: dict[tuple[str, str], float] = {
 }
 
 NOTE_GROUPS = {
-    "citrus": {"bergamot", "lemon", "lime", "mandarin", "grapefruit", "orange_blossom"},
-    "fruit": {"raspberry", "black_cherry", "cherry", "blackcurrant_bud", "apple", "pear", "plum"},
+    "citrus": {"bergamot", "lemon", "lime", "mandarin", "grapefruit", "orange_blossom", "blood_orange"},
+    "fruit": {"raspberry", "black_cherry", "cherry", "blackcurrant_bud", "apple", "pear", "plum", "peach"},
     "wood": {"oud", "sandalwood", "cedarwood", "guaiac_wood", "cashmeran", "cashmere_wood", "amberwood", "iso_e_super", "vetiver"},
     "amber_resin": {"amber", "ambroxan", "benzoin", "labdanum", "peru_balsam", "incense"},
     "gourmand": {"vanilla", "tonka_bean", "caramel", "coffee", "chestnut", "sugar_cane", "praline"},
     "spice": {"pink_pepper", "clove", "clary_sage", "timur_berry", "cinnamon", "cardamom"},
     "floral": {"rose_centifolia", "rose", "geranium", "jasmine", "orris", "orange_blossom"},
-    "dark": {"tobacco", "leather", "cade", "smoke", "rum"},
+    "dark": {"tobacco", "leather", "cade", "smoke", "rum", "cognac"},
     "musk": {"musk", "muscone", "ambroxan", "iso_e_super"},
 }
 ENHANCER_NOTES = {"iso_e_super", "ambroxan"}
@@ -99,8 +160,8 @@ def _note_set(profile: PerfumeProfile, section: str) -> set[str]:
 
 
 def _note_compatibility(base: PerfumeProfile, top: PerfumeProfile) -> tuple[float, float]:
-    all_a = set(base.top_notes + base.heart_notes + base.base_notes)
-    all_b = set(top.top_notes + top.heart_notes + top.base_notes)
+    all_a = set(base.known_notes + base.top_notes + base.heart_notes + base.base_notes)
+    all_b = set(top.known_notes + top.top_notes + top.heart_notes + top.base_notes)
     if not all_a or not all_b:
         return 60.0, 55.0
     overlap = len(all_a & all_b)
