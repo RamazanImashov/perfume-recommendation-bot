@@ -233,7 +233,7 @@ def analyze_pair_situation(first: dict | PerfumeProfile, second: dict | PerfumeP
     density_balance = _balance_score(base.density, top.density, 1.5)
     warmth_balance = _balance_score(base.warmth, top.warmth, 1.2)
     projection_balance = clamp(100 - abs(base.projection - top.projection) * 14 - max(0, base.projection + top.projection - 8) * 9)
-    scenario = (indiv_a.breakdown.event_score + indiv_b.breakdown.event_score + indiv_a.breakdown.effect_score + indiv_b.breakdown.effect_score) / 4
+    scenario = (indiv_a.breakdown.weighted_score + indiv_b.breakdown.weighted_score) / 2
     climate = (indiv_a.breakdown.climate_score + indiv_b.breakdown.climate_score) / 2
     close = (base.close_distance_score + top.close_distance_score) * 10
     subs = {
@@ -269,6 +269,12 @@ def analyze_pair_situation(first: dict | PerfumeProfile, second: dict | PerfumeP
         if max_temp is None or situation.temperature <= float(max_temp):
             curated_bonus = CURATED_LAYERING_BONUS
     score = clamp(raw + curated_bonus - hard_penalty)
+    # Compatibility cannot override a constituent's hard context restriction.
+    restricted = [item for item in (indiv_a, indiv_b) if item.breakdown.hard_penalty > 0]
+    if restricted:
+        score = min(score, *(item.score for item in restricted))
+        individual_warnings = [f"{item.name}: {warning}" for item in restricted for warning in item.hard_warnings]
+        warnings = list(dict.fromkeys(individual_warnings + warnings))
     reasons = []
     if accords >= 80: reasons.append("аккорды хорошо связываются")
     if bridging >= 70: reasons.append("есть связующие ноты между слоями")

@@ -13,6 +13,7 @@ from app.services.scoring_config import (
     HARD_PENALTIES,
     OUTDOOR_EXPOSURE_CLIMATE_FACTOR,
     SCORE_WEIGHTS,
+    NO_OUTFIT_WEIGHTS,
     TEMPERATURE_CURVE,
 )
 from app.services.spray_advisor import recommend_sprays
@@ -121,6 +122,8 @@ def environment_score(profile: PerfumeProfile, situation: Situation) -> tuple[fl
 
 
 def outfit_score(profile: PerfumeProfile, situation: Situation) -> tuple[float, list[str]]:
+    if not situation.outfit.raw_text.strip():
+        return 0.0, []
     outfit = situation.outfit
     legacy = profile.legacy
     legacy_outfits = {str(x).lower() for x in legacy.get("outfits", [])}
@@ -221,17 +224,19 @@ def hard_constraints(profile: PerfumeProfile, situation: Situation) -> tuple[flo
 def _profile_completeness(profile: PerfumeProfile) -> float:
     values = [profile.main_accords, profile.effects_profile, profile.layer_families, profile.ideal_temperature, profile.projection, profile.longevity]
     base = sum(bool(v) for v in values) / len(values)
-    notes = bool(profile.top_notes or profile.heart_notes or profile.base_notes)
+    notes = bool(profile.known_notes or profile.top_notes or profile.heart_notes or profile.base_notes)
     return min(1.0, base * 0.85 + (0.15 if notes else 0.0))
 
 
 def _situation_completeness(situation: Situation) -> float:
-    checks = [situation.event, situation.circumstance, situation.outfit.raw_text, situation.time_of_day, situation.season, situation.temperature is not None, situation.humidity is not None]
+    checks = [situation.event, situation.circumstance, situation.time_of_day, situation.season, situation.temperature is not None, situation.humidity is not None]
     return sum(bool(x) for x in checks) / len(checks)
 
 
 def confidence_for(result: RecommendationResult, profile: PerfumeProfile, situation: Situation, margin: float = 0.0, history_count: int = 0) -> float:
-    subs = [result.breakdown.event_score, result.breakdown.climate_score, result.breakdown.effect_score, result.breakdown.environment_score, result.breakdown.outfit_score, result.breakdown.time_score, result.breakdown.season_score]
+    subs = [result.breakdown.event_score, result.breakdown.climate_score, result.breakdown.effect_score, result.breakdown.environment_score, result.breakdown.time_score, result.breakdown.season_score]
+    if situation.outfit.raw_text.strip():
+        subs.append(result.breakdown.outfit_score)
     agreement = clamp(100 - statistics.pstdev(subs) * 1.4) / 100
     conf = 28 + _profile_completeness(profile) * 22 + _situation_completeness(situation) * 18 + agreement * 17 + min(1, history_count / 8) * 5 + min(10, max(0, margin))
     return clamp(conf)
@@ -254,9 +259,10 @@ def score_perfume(profile_or_dict, situation: Situation, personal_snapshot: dict
     s, s_ev = season_score(profile, situation)
     personal, recent_penalty, p_ev = personal_adjustment(profile.name, situation, personal_snapshot)
     hard_penalty, warnings = hard_constraints(profile, situation)
+    weights = SCORE_WEIGHTS if situation.outfit.raw_text.strip() else NO_OUTFIT_WEIGHTS
     weighted = (
-        e * SCORE_WEIGHTS["event"] + c * SCORE_WEIGHTS["climate"] + ef * SCORE_WEIGHTS["effect"] + env * SCORE_WEIGHTS["environment"] +
-        out * SCORE_WEIGHTS["outfit"] + t * SCORE_WEIGHTS["time"] + s * SCORE_WEIGHTS["season"] + personal * SCORE_WEIGHTS["personal"]
+        e * weights["event"] + c * weights["climate"] + ef * weights["effect"] + env * weights["environment"] +
+        out * weights["outfit"] + t * weights["time"] + s * weights["season"] + personal * weights["personal"]
     )
     final = clamp(weighted - hard_penalty - recent_penalty)
     evidence = {"event": e_ev, "climate": c_ev, "effect": ef_ev, "environment": env_ev, "outfit": out_ev, "time": t_ev, "season": s_ev, "personal": p_ev}

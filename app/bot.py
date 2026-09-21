@@ -12,7 +12,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from app.config import load_config
-from app.data.perfumes import PERFUMES
+from app.data.perfumes import PERFUMES, perfume_volume_label
 from app.keyboards import (
     advanced_keyboard,
     brand_keyboard,
@@ -25,6 +25,7 @@ from app.keyboards import (
     location_keyboard,
     main_keyboard,
     perfume_keyboard,
+    outfit_keyboard,
     perfume_list_keyboard,
     preset_layering_keyboard,
     recommendation_mode_keyboard,
@@ -141,6 +142,14 @@ async def show_all_perfumes(message: Message, state: FSMContext):
     await _send_perfume_list(message, PERFUMES, "Все парфюмы по брендам")
 
 
+@router.message(F.text.in_({"5 или 10 мл", "100 мл"}))
+async def show_by_volume(message: Message, state: FSMContext):
+    if await deny_if_not_owner(message): return
+    await state.clear()
+    selected = [p for p in PERFUMES if p.get("volume_label") == message.text]
+    await _send_perfume_list(message, selected, f"Объём: {message.text}")
+
+
 @router.message(F.text == "Фильтр по бренду")
 async def choose_brand_filter(message: Message, state: FSMContext):
     if await deny_if_not_owner(message): return
@@ -188,7 +197,7 @@ def format_perfume_catalog(perfumes: list[dict], title: str) -> str:
             current_brand = brand
             lines.append(str(brand))
         gender = {"men": "мужской", "women": "женский", "unisex": "унисекс"}.get(perfume.get("gender"), str(perfume.get("gender", "")))
-        lines.append(f"— {perfume.get('name')} ({gender})")
+        lines.append(f"— {perfume.get('name')} ({gender}) · {perfume['volume_label']}")
     return "\n".join(lines)
 
 
@@ -265,15 +274,17 @@ async def get_event(message: Message, state: FSMContext):
         await message.answer("Выбери вариант из кнопок.", reply_markup=event_keyboard()); return
     await state.update_data(event=event, event_label=message.text)
     await state.set_state(PerfumeForm.outfit)
-    await message.answer("Опиши образ: верх, низ, обувь, цвета и стиль.", reply_markup=remove_keyboard)
+    await message.answer("Опиши одежду и стиль или нажми «Пропустить». Без описания подберу по событию, погоде, сезону и времени дня.", reply_markup=outfit_keyboard())
 
 
 @router.message(PerfumeForm.outfit)
 async def get_outfit(message: Message, state: FSMContext):
     if await deny_if_not_owner(message): return
     text = (message.text or "").strip()
-    if len(text) < 5:
-        await message.answer("Опиши образ чуть подробнее."); return
+    if text == "Пропустить":
+        text = ""
+    elif len(text) < 5:
+        await message.answer("Опиши образ чуть подробнее или нажми «Пропустить».", reply_markup=outfit_keyboard()); return
     await state.update_data(outfit_text=text)
     await state.set_state(PerfumeForm.circumstance)
     await message.answer("Где в основном будешь?", reply_markup=circumstance_keyboard())
@@ -417,7 +428,7 @@ def _situation_from_data(data: dict) -> Situation:
     target_raw = data.get("target_datetime")
     target = datetime.fromisoformat(target_raw) if isinstance(target_raw, str) else target_raw
     return build_situation(
-        event=data.get("event", "casual"), outfit_text=data.get("outfit_text", "casual"), circumstance=data.get("circumstance", "outdoor"),
+        event=data.get("event", "casual"), outfit_text=data.get("outfit_text", ""), circumstance=data.get("circumstance", "outdoor"),
         effect=data.get("effect", "any"), weather=data.get("weather", {}), place=data.get("place", ""), target_datetime=target,
         latitude=data.get("latitude"), longitude=data.get("longitude"), timezone=data.get("timezone"), manual_time=data.get("time_of_day", "auto"),
         manual_season=data.get("season", "auto"), outdoor_exposure=data.get("outdoor_exposure"),
@@ -493,7 +504,7 @@ def format_perfume_results(situation: Situation, results, start_index: int = 1, 
     if not results: return "Больше вариантов не нашёл."
     lines = [f"{situation.location or 'Локация'}: {situation.temperature:g}°C · {title}", ""]
     for idx, result in enumerate(results, start=start_index):
-        lines.append(f"{idx}. {result.name} — {result.brand}")
+        lines.append(f"{idx}. {result.name} — {result.brand} · {perfume_volume_label(result.name)}")
         lines.append(f"{result.score:.0f}/100 · Уверенность: {result.confidence_label} · {result.role}")
         reasons = explanation_lines(result, situation, 2)
         if reasons: lines.append("Почему: " + "; ".join(reasons) + ".")
@@ -508,7 +519,7 @@ def format_layering_results(situation: Situation, results, start_index: int = 1,
     if not results: return "Больше пар не нашёл."
     lines = [f"{situation.location or 'Локация'}: {situation.temperature:g}°C · {title}", ""]
     for idx, result in enumerate(results, start=start_index):
-        lines.append(f"{idx}. {result.base_name} + {result.top_name}")
+        lines.append(f"{idx}. {result.base_name} ({perfume_volume_label(result.base_name)}) + {result.top_name} ({perfume_volume_label(result.top_name)})")
         lines.append(f"{result.score:.0f}/100 · Уверенность: {result.confidence_label}")
         if result.reasons: lines.append("Почему: " + "; ".join(result.reasons[:2]) + ".")
         lines.append("Как: " + result.spray_plan)
@@ -608,11 +619,12 @@ def _format_preset_page(pairs: list[dict], offset: int) -> str:
     lines = [f"Готовые пары {offset + 1}–{offset + len(page)} из {len(pairs)}:", ""]
     for index, item in enumerate(page, offset + 1):
         lines += [
-            f"{index}. {item['base']['name']} + {item['top']['name']}",
+            f"{index}. {item['base']['name']} ({perfume_volume_label(item['base']['name'])}) + {item['top']['name']} ({perfume_volume_label(item['top']['name'])})",
             f"Оценка: {item['score']:.0f}/100",
             f"Идея: {item.get('label', '')}",
             f"Когда: {item.get('best_for', '')}",
             f"Как: {item.get('apply', '')}",
+            *(["Риск: " + "; ".join(item["warnings"])] if item.get("warnings") else []),
             "",
         ]
     return "\n".join(lines).strip()
@@ -746,7 +758,7 @@ async def _finish_reverse_with_situation(message: Message, state: FSMContext, si
     ]
     pairs.sort(key=lambda item: (-item.score, item.base_name, item.top_name))
     lines = [
-        f"{result.name}: {result.score:.0f}/100",
+        f"{result.name} · {perfume_volume_label(result.name)}: {result.score:.0f}/100",
         f"Лучшее время: {_best_profile_time(profile)}",
         f"Лучший сценарий: {_best_profile_event(profile)}",
         f"Как: {result.spray_count} пш. — {', '.join(result.spray_locations)}",
@@ -776,7 +788,7 @@ async def reverse_perfume(message: Message, state: FSMContext):
     await state.set_state(PerfumeForm.location)
     previous = await history.get_last_location() if history.enabled else None
     await message.answer(
-        "Для точной оценки нужны погода, событие и образ. Отправь геолокацию или напиши город.",
+        "Для оценки нужны погода и событие. Описание одежды необязательно. Отправь геолокацию или напиши город.",
         reply_markup=location_keyboard(bool(previous)),
     )
 

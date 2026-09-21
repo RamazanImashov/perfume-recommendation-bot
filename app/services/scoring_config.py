@@ -75,3 +75,10 @@ LAYERING_WEIGHTS = {
     "climate": 0.07,
     "close_distance": 0.04,
 }
+
+
+# With no outfit, redistribute weight to the actual context, never assumed casual clothes.
+NO_OUTFIT_WEIGHTS = {
+    "event": 0.30, "climate": 0.25, "effect": 0.10, "environment": 0.15,
+    "outfit": 0.0, "time": 0.10, "season": 0.05, "personal": 0.05,
+}

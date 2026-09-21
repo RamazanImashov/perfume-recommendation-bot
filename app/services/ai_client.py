@@ -68,7 +68,7 @@ class AIClient:
         } for c in candidates[:6]]
         data = await self._chat_json([
             {"role": "system", "content": "Rerank only the provided candidates. Do not add perfumes, change facts, ignore warnings, or invent notes/weather. Return {\"order\":[names...]} only."},
-            {"role": "user", "content": json.dumps({"situation": situation.model_dump(mode="json"), "candidates": safe}, ensure_ascii=False)},
+            {"role": "user", "content": json.dumps({"situation": {**situation.model_dump(mode="json"), "outfit": situation.outfit.model_dump() if situation.outfit.raw_text.strip() else None}, "candidates": safe}, ensure_ascii=False)},
         ])
         order = data.get("order") if isinstance(data, dict) else None
         if not isinstance(order, list):

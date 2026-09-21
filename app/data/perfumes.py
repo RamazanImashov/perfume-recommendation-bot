@@ -2368,3 +2368,14 @@ EFFECT_ALIASES = {'чисто': 'clean',
 # Extended deterministic profile migration layer. Existing fields remain untouched.
 from app.models.perfume import enrich_perfume_database
 PERFUMES = enrich_perfume_database(PERFUMES)
+
+
+# Owner-supplied bottle sizes, not remaining stock or product specifications.
+SMALL_VOLUME_IDS = frozenset({1, 2, 3, 4, 5, 8, 10, 11, 12, 19, 32, 33, 37, 38, 39, 40, 41, 42, 43, 44})
+for perfume in PERFUMES:
+    perfume["volume_group"] = "small" if perfume["id"] in SMALL_VOLUME_IDS else "large"
+    perfume["volume_label"] = "5 или 10 мл" if perfume["volume_group"] == "small" else "100 мл"
+
+
+def perfume_volume_label(name: str) -> str:
+    return next((p["volume_label"] for p in PERFUMES if p["name"] == name), "объём не указан")

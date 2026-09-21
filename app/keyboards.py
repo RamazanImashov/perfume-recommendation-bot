@@ -53,6 +53,10 @@ def event_keyboard() -> ReplyKeyboardMarkup:
     ], resize_keyboard=True)
 
 
+def outfit_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="Пропустить")], [KeyboardButton(text="Отмена")]], resize_keyboard=True)
+
+
 def circumstance_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(keyboard=[
         [KeyboardButton(text="Улица"), KeyboardButton(text="Помещение")],
@@ -99,7 +103,7 @@ def recommendation_mode_keyboard() -> ReplyKeyboardMarkup:
 
 
 def perfume_list_keyboard() -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="Все по брендам")], [KeyboardButton(text="Фильтр по бренду")], [KeyboardButton(text="Мужские"), KeyboardButton(text="Женские")], [KeyboardButton(text="Унисекс")], [KeyboardButton(text="Отмена")]], resize_keyboard=True)
+    return ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="Все по брендам")], [KeyboardButton(text="Фильтр по бренду")], [KeyboardButton(text="5 или 10 мл"), KeyboardButton(text="100 мл")], [KeyboardButton(text="Мужские"), KeyboardButton(text="Женские")], [KeyboardButton(text="Унисекс")], [KeyboardButton(text="Отмена")]], resize_keyboard=True)
 
 
 def brand_keyboard(brands: list[str]) -> ReplyKeyboardMarkup:
