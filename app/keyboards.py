@@ -10,7 +10,7 @@ def main_keyboard() -> ReplyKeyboardMarkup:
         [KeyboardButton(text="Подобрать аромат")],
         [KeyboardButton(text="Хочу надеть конкретный аромат")],
         [KeyboardButton(text="Почему не этот аромат?")],
-        [KeyboardButton(text="Готовые пары наслаивания")],
+        [KeyboardButton(text="Наслаивание вручную"), KeyboardButton(text="Готовые пары наслаивания")],
         [KeyboardButton(text="Все мои парфюмы")],
         [KeyboardButton(text="Как в прошлый раз")],
         [KeyboardButton(text="Отмена")],

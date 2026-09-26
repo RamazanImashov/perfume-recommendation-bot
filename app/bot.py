@@ -42,6 +42,7 @@ from app.services.ai_client import AIClient
 from app.services.explanations import comparison_reason, explanation_lines, risk_line
 from app.services.history import OwnerHistory
 from app.services.layering import (
+    analyze_pair,
     analyze_pair_situation,
     get_preset_layering_pairs,
     recommend_layering_situation,
@@ -61,7 +62,7 @@ from app.services.recommender import (
 from app.services.scoring import score_perfume as score_profile
 from app.services.situation_parser import build_situation
 from app.services.weather import get_coordinates, get_weather
-from app.states import PerfumeForm, PerfumeListForm, PresetLayeringBrowseForm, RecommendationBrowseForm, ReverseForm, WhyNotForm
+from app.states import ManualLayeringForm, PerfumeForm, PerfumeListForm, PresetLayeringBrowseForm, RecommendationBrowseForm, ReverseForm, WhyNotForm
 from app.storage import create_fsm_storage, create_personal_storage
 
 logger = logging.getLogger(__name__)
@@ -146,7 +147,8 @@ async def show_all_perfumes(message: Message, state: FSMContext):
 async def show_by_volume(message: Message, state: FSMContext):
     if await deny_if_not_owner(message): return
     await state.clear()
-    selected = [p for p in PERFUMES if p.get("volume_label") == message.text]
+    group = "small" if message.text == "5 или 10 мл" else "large"
+    selected = [p for p in PERFUMES if p.get("volume_group") == group]
     await _send_perfume_list(message, selected, f"Объём: {message.text}")
 
 
@@ -604,6 +606,76 @@ async def feedback_tags(message: Message, state: FSMContext):
     else:
         text = "Принял. Persistent storage не настроен, поэтому после cold start история не сохранится."
     await state.clear()
+    await message.answer(text, reply_markup=main_keyboard())
+
+
+# ---------- manual/preset layering ----------
+
+@router.message(F.text == "Наслаивание вручную")
+async def manual_layering_start(message: Message, state: FSMContext):
+    if await deny_if_not_owner(message): return
+    await state.set_state(ManualLayeringForm.first_brand)
+    await message.answer("Выбери бренд первого аромата.", reply_markup=brand_keyboard(_brands()))
+
+
+@router.message(ManualLayeringForm.first_brand)
+async def manual_first_brand(message: Message, state: FSMContext):
+    perfumes = _perfumes_by_brand((message.text or "").strip())
+    if not perfumes:
+        await message.answer("Выбери бренд из кнопок.", reply_markup=brand_keyboard(_brands())); return
+    await state.set_state(ManualLayeringForm.first_perfume)
+    await message.answer("Выбери первый аромат.", reply_markup=perfume_keyboard(perfumes))
+
+
+@router.message(ManualLayeringForm.first_perfume)
+async def manual_first_perfume(message: Message, state: FSMContext):
+    perfume = _perfume_from_label(message.text or "")
+    if not perfume:
+        await message.answer("Выбери аромат из кнопок."); return
+    await state.update_data(first_perfume_id=perfume.get("id"))
+    await state.set_state(ManualLayeringForm.second_brand)
+    await message.answer("Выбери бренд второго аромата.", reply_markup=brand_keyboard(_brands()))
+
+
+@router.message(ManualLayeringForm.second_brand)
+async def manual_second_brand(message: Message, state: FSMContext):
+    perfumes = _perfumes_by_brand((message.text or "").strip())
+    if not perfumes:
+        await message.answer("Выбери бренд из кнопок.", reply_markup=brand_keyboard(_brands())); return
+    await state.set_state(ManualLayeringForm.second_perfume)
+    await message.answer("Выбери второй аромат.", reply_markup=perfume_keyboard(perfumes))
+
+
+@router.message(ManualLayeringForm.second_perfume)
+async def manual_second_perfume(message: Message, state: FSMContext):
+    second = _perfume_from_label(message.text or "")
+    state_data = await state.get_data()
+    first = _perfume_by_id(state_data.get("first_perfume_id"))
+    situation = await _require_last_situation(message, state, notify=False)
+    recommendation_context = state_data.get("recommendation_context")
+    await state.clear()
+    if recommendation_context:
+        await state.update_data(recommendation_context=recommendation_context)
+    if not first or not second or first.get("id") == second.get("id"):
+        await message.answer("Нужны два разных аромата.", reply_markup=main_keyboard()); return
+    if situation:
+        result = analyze_pair_situation(first, second, situation)
+        text = (
+            f"{result.base_name} ({perfume_volume_label(result.base_name)}) + "
+            f"{result.top_name} ({perfume_volume_label(result.top_name)})\n"
+            f"{result.score:.0f}/100 · Уверенность: {result.confidence_label}\n"
+            f"Как: {result.spray_plan}"
+        )
+        if result.reasons: text += "\nПочему: " + "; ".join(result.reasons[:2]) + "."
+        if result.warnings: text += "\nРиск: " + result.warnings[0] + "."
+    else:
+        result = analyze_pair(first, second)
+        text = (
+            f"{result['base']['name']} ({perfume_volume_label(result['base']['name'])}) + "
+            f"{result['top']['name']} ({perfume_volume_label(result['top']['name'])})\n"
+            f"{result['score']:.0f}/100\nКак: {result['apply']}\n"
+            "Оценка дана без погоды и события."
+        )
     await message.answer(text, reply_markup=main_keyboard())
 
 

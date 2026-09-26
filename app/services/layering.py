@@ -104,6 +104,13 @@ PRESET_LAYERING_PAIRS.extend([{'first': 'Stronger With You Powerfully',
   'directional': True,
   'max_temperature': 29}])
 
+PRESET_LAYERING_PAIRS.extend([
+    {"first": "Bleu de Chanel Eau de Parfum", "second": "Molecule 01", "label": "цитрус, кедр и сандал + Iso E Super", "best_for": "работа, встреча, ресторан", "directional": True, "max_temperature": 28},
+    {"first": "Bleu de Chanel Eau de Parfum", "second": "Molecule 02", "label": "ароматическая древесина + Ambroxan", "best_for": "прогулка, вечер, smart casual", "directional": True, "max_temperature": 27},
+    {"first": "Blue Seduction", "second": "Molecule 01", "label": "мята, акватика и арбуз + Iso E Super", "best_for": "тёплый день, офис, прогулка", "directional": True, "max_temperature": 33},
+    {"first": "Blue Seduction", "second": "Molecule 02", "label": "свежая акватика + Ambroxan", "best_for": "жара, casual, улица", "directional": True, "max_temperature": 33},
+])
+
 FAMILY_COMPATIBILITY: dict[tuple[str, str], float] = {
     ("fresh", "woody"): 88, ("fresh", "amber"): 80, ("fresh", "gourmand"): 68, ("fresh", "leather"): 72,
     ("aquatic", "woody"): 82, ("aquatic", "amber"): 75, ("woody", "gourmand"): 84, ("woody", "fruity"): 82,
@@ -121,11 +128,11 @@ FAMILY_COMPATIBILITY: dict[tuple[str, str], float] = {
 }
 
 NOTE_GROUPS = {
-    "citrus": {"bergamot", "lemon", "lime", "mandarin", "grapefruit", "orange_blossom", "blood_orange"},
-    "fruit": {"raspberry", "black_cherry", "cherry", "blackcurrant_bud", "apple", "pear", "plum", "peach"},
-    "wood": {"oud", "sandalwood", "cedarwood", "guaiac_wood", "cashmeran", "cashmere_wood", "amberwood", "iso_e_super", "vetiver"},
+    "citrus": {"citrus", "bergamot", "lemon", "lime", "mandarin", "grapefruit", "orange_blossom", "blood_orange"},
+    "fruit": {"cassis", "watermelon", "raspberry", "black_cherry", "cherry", "blackcurrant_bud", "apple", "pear", "plum", "peach"},
+    "wood": {"woody_notes", "ambery_cedar", "oud", "sandalwood", "cedarwood", "guaiac_wood", "cashmeran", "cashmere_wood", "amberwood", "iso_e_super", "vetiver"},
     "amber_resin": {"amber", "ambroxan", "benzoin", "labdanum", "peru_balsam", "incense"},
-    "gourmand": {"vanilla", "tonka_bean", "caramel", "coffee", "chestnut", "sugar_cane", "praline"},
+    "gourmand": {"cappuccino", "vanilla", "tonka_bean", "caramel", "coffee", "chestnut", "sugar_cane", "praline"},
     "spice": {"pink_pepper", "clove", "clary_sage", "timur_berry", "cinnamon", "cardamom"},
     "floral": {"rose_centifolia", "rose", "geranium", "jasmine", "orris", "orange_blossom"},
     "dark": {"tobacco", "leather", "cade", "smoke", "rum", "cognac"},

@@ -2293,6 +2293,83 @@ PERFUMES.extend([{'id': 40,
   'projection': 3.3,
   'longevity': 4.2}])
 
+# Profiles added 2026-09-26. Facts use official product pages; numeric scores are heuristic estimates.
+PERFUMES.extend([
+ {'id': 45,
+  'name': 'Bleu de Chanel Eau de Parfum',
+  'brand': 'Chanel',
+  'gender': 'men',
+  'url': 'https://www.chanel.com/us/fragrance/p/107360/bleu-de-chanel-eau-de-parfum-spray/',
+  'fact_sources': ['https://www.chanel.com/us/fragrance/p/107360/bleu-de-chanel-eau-de-parfum-spray/'],
+  'known_notes': ['citrus', 'ambery_cedar', 'woody_notes', 'musk', 'sandalwood', 'tonka_bean', 'vanilla'],
+  'notes': {},
+  'type': ['fresh', 'aromatic', 'woody', 'amber', 'musk'],
+  'main_accords': ['fresh', 'aromatic', 'woody', 'amber', 'musk'],
+  'description': 'Свежий цитрусовый аккорд, амбровый кедр, мускусная древесина и сандал.',
+  'summary': 'Универсальный свежий древесно-амбровый аромат с мягкой глубиной.',
+  'weather_min': 5, 'weather_max': 28, 'best_temperature': '5–28°C',
+  'ideal_temperature': 18, 'comfortable_temperature_min': 5, 'comfortable_temperature_max': 28,
+  'hard_temperature_min': -2, 'hard_temperature_max': 34,
+  'occasions': ['work', 'meeting', 'cafe', 'date', 'restaurant', 'birthday', 'casual'],
+  'outfits': ['shirt', 'trousers', 'loafers', 'blazer', 'clean_casual', 'smart_casual', 'business_casual', 'formal'],
+  'effects': ['clean', 'expensive', 'calm', 'sexy'],
+  'time_of_day': ['morning', 'day', 'evening'], 'seasons': ['spring', 'summer', 'autumn', 'winter'],
+  'weather_tags': ['cool', 'warm'], 'strength': 'medium_strong', 'sprays': '2–3',
+  'apply': '1 на грудь, 1 на бок шеи; третий только для улицы',
+  'avoid': ['extreme_heat', 'small_room_overapplication'],
+  'minus': 'В тесном помещении лишний пшик делает древесно-амбровую базу навязчивой.',
+  'best_for': 'Работа, встреча, ресторан и универсальный smart casual.',
+  'layer_role': 'flexible', 'layer_families': ['fresh', 'aromatic', 'woody', 'amber', 'musk'],
+  'layer_conflicts': [], 'layer_tags': ['citrus', 'ambery_cedar', 'woody_notes', 'musk', 'sandalwood', 'tonka_bean', 'vanilla'],
+  'humidity_preference': 3.0, 'indoor_score': 4.1, 'close_distance_score': 3.7, 'outdoor_score': 4.1,
+  'profile_basis': 'heuristic_estimate',
+  'effects_profile': {'clean': 4.4, 'expensive': 4.5, 'sexy': 3.9, 'noticeable': 3.8, 'calm': 3.8, 'unusual': 2.8},
+  'freshness': 3.9, 'sweetness': 2.3, 'warmth': 3.0, 'density': 3.2, 'darkness': 2.4,
+  'cleanliness': 4.2, 'formality': 4.2, 'romantic': 3.7, 'uniqueness': 2.9,
+  'projection': 3.7, 'longevity': 4.2,
+  'morning_score': 4.1, 'day_score': 4.7, 'evening_score': 4.5, 'night_score': 3.6,
+  'study_score': 3.8, 'work_score': 4.7, 'meeting_score': 4.8, 'walk_score': 4.1,
+  'cafe_score': 4.4, 'date_score': 4.4, 'restaurant_score': 4.7, 'party_score': 3.6,
+  'club_score': 3.0, 'birthday_score': 4.1, 'active_score': 3.1, 'casual_score': 4.5},
+ {'id': 46,
+  'name': 'Blue Seduction',
+  'brand': 'Antonio Banderas',
+  'gender': 'men',
+  'url': 'https://www.banderasperfumes.com/int/en/mens-fragrances/blue-seduction/',
+  'fact_sources': ['https://www.banderasperfumes.com/int/en/mens-fragrances/blue-seduction/'],
+  'known_notes': ['bergamot', 'cassis', 'mint', 'aquatic_notes', 'watermelon', 'floral_notes', 'cardamom', 'woody_notes', 'amber', 'musk', 'cedar', 'cappuccino'],
+  'notes': {'top': ['bergamot', 'cassis', 'mint'], 'heart': ['aquatic_notes', 'watermelon', 'floral_notes', 'cardamom'], 'base': ['woody_notes', 'amber', 'musk', 'cedar', 'cappuccino']},
+  'type': ['fresh', 'aquatic', 'aromatic', 'fruity', 'woody'],
+  'main_accords': ['fresh', 'aquatic', 'aromatic', 'fruity', 'woody'],
+  'description': 'Бергамот, кассис и мята переходят в акватический арбуз, кардамон, кедр и капучино.',
+  'summary': 'Лёгкий акватический аромат для тёплого дня и повседневных задач.',
+  'weather_min': 14, 'weather_max': 33, 'best_temperature': '14–33°C',
+  'ideal_temperature': 24, 'comfortable_temperature_min': 14, 'comfortable_temperature_max': 33,
+  'hard_temperature_min': 7, 'hard_temperature_max': 39,
+  'occasions': ['study', 'work', 'walk', 'cafe', 'casual', 'active'],
+  'outfits': ['t_shirt', 'jeans', 'sneakers', 'linen', 'sport', 'casual', 'clean_casual'],
+  'effects': ['clean', 'calm', 'fresh'],
+  'time_of_day': ['morning', 'day'], 'seasons': ['spring', 'summer', 'autumn'],
+  'weather_tags': ['warm', 'hot', 'humid'], 'strength': 'light', 'sprays': '3–4',
+  'apply': '2 на шею, 1 на грудь; четвёртый только для улицы',
+  'avoid': ['extreme_cold', 'formal_evening'],
+  'minus': 'Лёгкий профиль теряется в мороз, клубе и рядом с тяжёлой базой.',
+  'best_for': 'Тёплый день, учёба, прогулка, офис и casual.',
+  'layer_role': 'top', 'layer_families': ['fresh', 'aquatic', 'aromatic', 'fruity', 'woody'],
+  'layer_conflicts': ['gourmand', 'tobacco'],
+  'layer_tags': ['bergamot', 'cassis', 'mint', 'aquatic_notes', 'watermelon', 'cardamom', 'amber', 'musk', 'cedar', 'cappuccino'],
+  'humidity_preference': 4.0, 'indoor_score': 4.5, 'close_distance_score': 4.5, 'outdoor_score': 3.3,
+  'profile_basis': 'heuristic_estimate',
+  'effects_profile': {'clean': 4.6, 'expensive': 2.4, 'sexy': 3.0, 'noticeable': 2.5, 'calm': 4.2, 'unusual': 2.7},
+  'freshness': 4.7, 'sweetness': 2.3, 'warmth': 1.7, 'density': 1.9, 'darkness': 1.0,
+  'cleanliness': 4.6, 'formality': 2.2, 'romantic': 2.9, 'uniqueness': 2.6,
+  'projection': 2.6, 'longevity': 2.7,
+  'morning_score': 4.8, 'day_score': 4.8, 'evening_score': 2.9, 'night_score': 1.9,
+  'study_score': 4.8, 'work_score': 4.3, 'meeting_score': 3.0, 'walk_score': 4.8,
+  'cafe_score': 4.3, 'date_score': 3.3, 'restaurant_score': 2.8, 'party_score': 2.5,
+  'club_score': 1.5, 'birthday_score': 3.0, 'active_score': 4.4, 'casual_score': 4.8}
+])
+
 EVENT_ALIASES = {'учеба': 'study',
  'универ': 'study',
  'колледж': 'study',
@@ -2371,10 +2448,11 @@ PERFUMES = enrich_perfume_database(PERFUMES)
 
 
 # Owner-supplied bottle sizes, not remaining stock or product specifications.
-SMALL_VOLUME_IDS = frozenset({1, 2, 3, 4, 5, 8, 10, 11, 12, 19, 32, 33, 37, 38, 39, 40, 41, 42, 43, 44})
+SMALL_VOLUME_IDS = frozenset({1, 2, 3, 4, 5, 8, 10, 11, 12, 19, 32, 33, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46})
+EXACT_VOLUME_LABELS = {45: "5 мл", 46: "5 мл"}
 for perfume in PERFUMES:
     perfume["volume_group"] = "small" if perfume["id"] in SMALL_VOLUME_IDS else "large"
-    perfume["volume_label"] = "5 или 10 мл" if perfume["volume_group"] == "small" else "100 мл"
+    perfume["volume_label"] = EXACT_VOLUME_LABELS.get(perfume["id"], "5 или 10 мл" if perfume["volume_group"] == "small" else "100 мл")
 
 
 def perfume_volume_label(name: str) -> str:

@@ -8,7 +8,7 @@ from app.services.layering import analyze_pair_situation
 from app.services.scoring import score_perfume, confidence_for
 from app.services.situation_parser import build_situation
 
-SMALL_IDS = {1, 2, 3, 4, 5, 8, 10, 11, 12, 19, 32, 33, 37, 38, 39, 40, 41, 42, 43, 44}
+SMALL_IDS = {1, 2, 3, 4, 5, 8, 10, 11, 12, 19, 32, 33, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46}
 
 
 def situation(**kwargs):
@@ -21,7 +21,7 @@ def situation(**kwargs):
 def test_inventory_exact_partition():
     assert {p['id'] for p in PERFUMES if p.get('volume_group') == 'small'} == SMALL_IDS
     assert sum(p.get('volume_label') == '100 мл' for p in PERFUMES) == 24
-    assert all(p.get('volume_label') == '5 или 10 мл' for p in PERFUMES if p['id'] in SMALL_IDS)
+    assert all(p.get('volume_label') == ('5 мл' if p['id'] in {45, 46} else '5 или 10 мл') for p in PERFUMES if p['id'] in SMALL_IDS)
 
 
 def test_skipped_outfit_does_not_affect_scores_or_confidence():
@@ -98,13 +98,13 @@ async def test_volume_filter_and_labels(bot_module):
     labels = {b.text for row in perfume_list_keyboard().keyboard for b in row}
     assert {'5 или 10 мл', '100 мл'} <= labels
     message, state = AsyncMock(), AsyncMock()
-    for label, expected in [('5 или 10 мл', 20), ('100 мл', 24)]:
+    for label, expected in [('5 или 10 мл', 22), ('100 мл', 24)]:
         message.answer.reset_mock()
         message.text = label
         await bot_module.show_by_volume(message, state)
         text = '\n'.join(c.args[0] for c in message.answer.call_args_list)
         assert sum(line.startswith('— ') for line in text.splitlines()) == expected
-        assert all(label in line for line in text.splitlines() if line.startswith('— '))
+        assert all(('5 мл' in line or '5 или 10 мл' in line) if label == '5 или 10 мл' else label in line for line in text.splitlines() if line.startswith('— '))
     rendered = bot_module.format_perfume_results(situation(), [score_perfume(PERFUMES[0], situation())])
     assert '5 или 10 мл' in rendered
     pair = analyze_pair_situation(PERFUMES[0], PERFUMES[5], situation())

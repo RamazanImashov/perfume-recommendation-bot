@@ -296,7 +296,7 @@ def _keyboard_texts(markup):
 
 def test_removed_modes_are_absent_from_keyboards():
     from app.keyboards import main_keyboard, recommendation_result_keyboard
-    removed = {"Сравнить ароматы", "Наслаивание вручную", "Быстрый запрос"}
+    removed = {"Сравнить ароматы", "Быстрый запрос"}
     assert removed.isdisjoint(_keyboard_texts(main_keyboard()))
     assert removed.isdisjoint(_keyboard_texts(recommendation_result_keyboard()))
 

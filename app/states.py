@@ -20,6 +20,13 @@ class RecommendationBrowseForm(StatesGroup):
     active = State()
 
 
+class ManualLayeringForm(StatesGroup):
+    first_brand = State()
+    first_perfume = State()
+    second_brand = State()
+    second_perfume = State()
+
+
 class PerfumeListForm(StatesGroup):
     brand = State()
 

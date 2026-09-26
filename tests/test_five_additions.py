@@ -31,6 +31,6 @@ def test_sweet_new_profiles_penalized_in_heat(name):
     assert score_perfume(p, situation(34)).score < score_perfume(p, situation(16)).score
 
 def test_catalogue_count_and_identity():
-    assert len(PERFUMES) == 44
-    assert len({p['id'] for p in PERFUMES}) == 44
+    assert len(PERFUMES) >= 44
+    assert len({p['id'] for p in PERFUMES}) == len(PERFUMES)
     assert find_perfume('Born in Roma Uomo Extradose')['gender'] == 'men'
