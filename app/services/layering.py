@@ -111,6 +111,24 @@ PRESET_LAYERING_PAIRS.extend([
     {"first": "Blue Seduction", "second": "Molecule 02", "label": "свежая акватика + Ambroxan", "best_for": "жара, casual, улица", "directional": True, "max_temperature": 33},
 ])
 
+# Merge report suggestions by unordered identity; preserve existing application direction.
+from app.data.seasonal_layering import REPORT_LAYERING_PAIRS, FIRST_TEST_PAIRS
+
+for report_pair in REPORT_LAYERING_PAIRS:
+    existing = next((p for p in PRESET_LAYERING_PAIRS if {p["first"], p["second"]} == {report_pair["first"], report_pair["second"]}), None)
+    if existing is None:
+        PRESET_LAYERING_PAIRS.append(dict(report_pair))
+    else:
+        existing.update({k: v for k, v in report_pair.items() if k not in {"first", "second"}})
+for pair in PRESET_LAYERING_PAIRS:
+    pair["first_test"] = frozenset((pair["first"], pair["second"])) in {frozenset(p) for p in FIRST_TEST_PAIRS}
+    first, second = find_perfume(pair["first"]), find_perfume(pair["second"])
+    if first and second:
+        pair.setdefault("seasons", sorted(set(first.get("seasons", [])) & set(second.get("seasons", []))) or None)
+        if not pair.get("seasons"): pair["seasons"] = ["spring", "summer", "autumn", "winter"]
+        pair.setdefault("times", sorted(set(first.get("time_of_day", [])) & set(second.get("time_of_day", []))) or None)
+        if not pair.get("times"): pair["times"] = ["morning", "day", "evening", "night"]
+
 FAMILY_COMPATIBILITY: dict[tuple[str, str], float] = {
     ("fresh", "woody"): 88, ("fresh", "amber"): 80, ("fresh", "gourmand"): 68, ("fresh", "leather"): 72,
     ("aquatic", "woody"): 82, ("aquatic", "amber"): 75, ("woody", "gourmand"): 84, ("woody", "fruity"): 82,
@@ -328,19 +346,23 @@ def analyze_pair_by_names(first_name: str, second_name: str) -> dict | None:
     return analyze_pair(first, second) if first and second else None
 
 
-def get_preset_layering_pairs(situation: Situation | None = None) -> list[dict]:
+def get_preset_layering_pairs(situation: Situation | None = None, *, season: str | None = None, time_of_day: str | None = None) -> list[dict]:
     results = []
+    has_context = situation is not None
     if situation is None:
         neutral = {"temperature": 16, "humidity": 50, "rain": 0, "precipitation": 0, "cloud_cover": 50, "wind_speed": 5, "is_day": False}
         situation = build_situation(
             event="restaurant", outfit_text="smart casual", circumstance="indoor", effect="expensive",
-            weather=neutral, manual_time="evening",
+            weather=neutral, manual_time=time_of_day or "evening", manual_season=season or "auto",
         )
     for item in PRESET_LAYERING_PAIRS:
+        if season and season not in item.get("seasons", []): continue
+        if time_of_day and time_of_day not in item.get("times", []): continue
         first, second = find_perfume(item["first"]), find_perfume(item["second"])
         if not first or not second: continue
         scored = analyze_pair_situation(first, second, situation)
         results.append({
+            "has_context": has_context,
             "score": scored.score,
             "confidence": scored.confidence,
             "confidence_label": scored.confidence_label,
@@ -353,6 +375,8 @@ def get_preset_layering_pairs(situation: Situation | None = None) -> list[dict]:
             "curated": scored.curated,
             "result": scored,
             "situation": situation.model_dump(mode="json"),
+            **{key: item.get(key) for key in ("seasons", "times", "report_ratio", "report_risk", "report_source", "experimental", "first_test")},
+            "ratio_names": [item.get("first"), item.get("second")] if not item.get("report_source") else next(([p["first"], p["second"]] for p in REPORT_LAYERING_PAIRS if {p["first"], p["second"]} == {item["first"], item["second"]}), [item["first"], item["second"]]),
             "label": item.get("label", ""),
             "best_for": item.get("best_for", ""),
         })

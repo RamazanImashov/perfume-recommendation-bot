@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -28,6 +29,8 @@ from app.keyboards import (
     outfit_keyboard,
     perfume_list_keyboard,
     preset_layering_keyboard,
+    preset_season_keyboard,
+    preset_time_keyboard,
     recommendation_mode_keyboard,
     recommendation_result_keyboard,
     remove_keyboard,
@@ -332,45 +335,94 @@ def _resolve_quick_target(label: str, timezone_name: str | None) -> datetime | N
     return None
 
 
+async def _finish_target_weather(message: Message, state: FSMContext, target: datetime, weather: dict) -> None:
+    await state.update_data(target_datetime=target.isoformat(), weather=weather, selected_date=None, time_of_day="auto", season="auto", outdoor_exposure=None)
+    await state.set_state(PerfumeForm.advanced)
+    source = "вручную" if weather.get("source") == "manual" else "прогноз"
+    await message.answer(f"Дата и время: {target:%d.%m.%Y %H:%M} ({target.tzinfo}). Температура: {weather['temperature']:g}°C, {source}.\nДополнительные настройки?", reply_markup=advanced_keyboard())
+
+
 async def _after_target_time(message: Message, state: FSMContext, target: datetime) -> None:
     data = await state.get_data()
     try:
         weather = await get_weather(data["latitude"], data["longitude"], target, data.get("timezone"))
+        if weather.get("temperature") is None:
+            raise ValueError("Температура отсутствует")
     except Exception:
-        weather = {"temperature": 20, "humidity": None, "rain": 0, "precipitation": 0, "cloud_cover": None, "wind_speed": None, "is_day": True, "source": "fallback"}
-    await state.update_data(target_datetime=target.isoformat(), weather=weather, time_of_day="auto", season="auto", outdoor_exposure=None)
-    await state.set_state(PerfumeForm.advanced)
-    await message.answer("Дополнительные настройки?", reply_markup=advanced_keyboard())
+        await state.update_data(target_datetime=target.isoformat())
+        await state.set_state(PerfumeForm.manual_temperature)
+        await message.answer(f"Прогноз на {target:%d.%m.%Y %H:%M} недоступен. Напиши ожидаемую температуру, например 18 или -5.", reply_markup=remove_keyboard)
+        return
+    await _finish_target_weather(message, state, target, weather)
 
 
 @router.message(PerfumeForm.target_time)
 async def get_target_time(message: Message, state: FSMContext):
     if await deny_if_not_owner(message): return
-    if message.text == "Указать время":
-        await state.set_state(PerfumeForm.manual_target_time)
-        await message.answer("Напиши время HH:MM, например 20:30.", reply_markup=remove_keyboard)
-        return
     data = await state.get_data()
+    now = _local_now(data.get("timezone"))
+    if message.text == "Выбрать дату":
+        await state.set_state(PerfumeForm.manual_date)
+        await message.answer("Напиши дату ДД.ММ.ГГГГ, например 03.10.2026.", reply_markup=remove_keyboard)
+        return
+    if message.text in {"Сегодня", "Завтра", "Указать время"}:
+        date = (now + timedelta(days=1 if message.text == "Завтра" else 0)).date()
+        await state.update_data(selected_date=date.isoformat())
+        await state.set_state(PerfumeForm.manual_target_time)
+        await message.answer(f"Дата: {date:%d.%m.%Y}. Напиши точное время HH:MM, например 20:30. Часовой пояс: {data.get('timezone') or now.tzinfo}.", reply_markup=remove_keyboard)
+        return
     target = _resolve_quick_target(message.text or "", data.get("timezone"))
     if target is None:
         await message.answer("Выбери вариант из кнопок.", reply_markup=target_time_keyboard()); return
     await _after_target_time(message, state, target)
 
 
+@router.message(PerfumeForm.manual_date)
+async def manual_date(message: Message, state: FSMContext):
+    if await deny_if_not_owner(message): return
+    data = await state.get_data()
+    text = (message.text or "").strip()
+    try:
+        if not re.fullmatch(r"\d{2}\.\d{2}\.\d{4}", text): raise ValueError
+        date = datetime.strptime(text, "%d.%m.%Y").date()
+        if date < _local_now(data.get("timezone")).date(): raise ValueError
+    except ValueError:
+        await message.answer("Нужна сегодняшняя или будущая дата в формате ДД.ММ.ГГГГ."); return
+    await state.update_data(selected_date=date.isoformat())
+    await state.set_state(PerfumeForm.manual_target_time)
+    await message.answer(f"Дата: {date:%d.%m.%Y}. Напиши время HH:MM, например 20:30.")
+
+
 @router.message(PerfumeForm.manual_target_time)
 async def manual_target_time(message: Message, state: FSMContext):
     if await deny_if_not_owner(message): return
     text = (message.text or "").strip()
-    try:
-        hour, minute = [int(x) for x in text.split(":", 1)]
-        if not (0 <= hour <= 23 and 0 <= minute <= 59): raise ValueError
-    except Exception:
+    if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", text):
         await message.answer("Формат HH:MM, например 20:30."); return
     data = await state.get_data()
     now = _local_now(data.get("timezone"))
-    target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-    if target < now - timedelta(minutes=10): target += timedelta(days=1)
+    date = datetime.fromisoformat(data.get("selected_date") or now.date().isoformat()).date()
+    hour, minute = map(int, text.split(":"))
+    target = now.replace(year=date.year, month=date.month, day=date.day, hour=hour, minute=minute, second=0, microsecond=0)
+    if target < now:
+        await message.answer("Это время уже прошло. Укажи будущее время или нажми «Отмена» и выбери другую дату."); return
     await _after_target_time(message, state, target)
+
+
+@router.message(PerfumeForm.manual_temperature)
+async def manual_temperature(message: Message, state: FSMContext):
+    if await deny_if_not_owner(message): return
+    text = (message.text or "").strip().replace(",", ".")
+    try:
+        if not re.fullmatch(r"[+-]?\d{1,2}(?:\.\d{1,2})?", text): raise ValueError
+        temp = float(text)
+        if not -60 <= temp <= 60: raise ValueError
+    except ValueError:
+        await message.answer("Напиши температуру числом от -60 до 60, например 18 или -5."); return
+    data = await state.get_data()
+    target = datetime.fromisoformat(data["target_datetime"])
+    weather = {"temperature": temp, "humidity": None, "cloud_cover": None, "wind_speed": None, "rain": 0, "precipitation": 0, "is_day": 6 <= target.hour < 18, "source": "manual"}
+    await _finish_target_weather(message, state, target, weather)
 
 
 @router.message(PerfumeForm.advanced)
@@ -504,7 +556,7 @@ async def more_recommendations(message: Message, state: FSMContext):
 
 def format_perfume_results(situation: Situation, results, start_index: int = 1, title: str = "Топ-3") -> str:
     if not results: return "Больше вариантов не нашёл."
-    lines = [f"{situation.location or 'Локация'}: {situation.temperature:g}°C · {title}", ""]
+    lines = [f"{situation.location or 'Локация'}: {situation.temperature:g}°C · {title}", f"Дата и время: {situation.target_datetime:%d.%m.%Y %H:%M}" if situation.target_datetime else "", ""]
     for idx, result in enumerate(results, start=start_index):
         lines.append(f"{idx}. {result.name} — {result.brand} · {perfume_volume_label(result.name)}")
         lines.append(f"{result.score:.0f}/100 · Уверенность: {result.confidence_label} · {result.role}")
@@ -519,7 +571,7 @@ def format_perfume_results(situation: Situation, results, start_index: int = 1, 
 
 def format_layering_results(situation: Situation, results, start_index: int = 1, title: str = "Топ-3 наслаивания") -> str:
     if not results: return "Больше пар не нашёл."
-    lines = [f"{situation.location or 'Локация'}: {situation.temperature:g}°C · {title}", ""]
+    lines = [f"{situation.location or 'Локация'}: {situation.temperature:g}°C · {title}", f"Дата и время: {situation.target_datetime:%d.%m.%Y %H:%M}" if situation.target_datetime else "", ""]
     for idx, result in enumerate(results, start=start_index):
         lines.append(f"{idx}. {result.base_name} ({perfume_volume_label(result.base_name)}) + {result.top_name} ({perfume_volume_label(result.top_name)})")
         lines.append(f"{result.score:.0f}/100 · Уверенность: {result.confidence_label}")
@@ -692,9 +744,14 @@ def _format_preset_page(pairs: list[dict], offset: int) -> str:
     for index, item in enumerate(page, offset + 1):
         lines += [
             f"{index}. {item['base']['name']} ({perfume_volume_label(item['base']['name'])}) + {item['top']['name']} ({perfume_volume_label(item['top']['name'])})",
-            f"Оценка: {item['score']:.0f}/100",
+            f"Оценка под ситуацию: {item['score']:.0f}/100" if item.get("has_context") else "Без оценки под личную ситуацию.",
             f"Идея: {item.get('label', '')}",
             f"Когда: {item.get('best_for', '')}",
+            "Сезоны: " + ", ".join(SEASON_LABELS[s] for s in item.get("seasons", [])),
+            "Время: " + ", ".join(TIME_LABELS[t] for t in item.get("times", [])),
+            *(["Для первого теста"] if item.get("first_test") else []),
+            *(["Эксперимент: " + (item.get("report_risk") or "требует проверки дозировки")] if item.get("experimental") else []),
+            *([f"Стартовая пропорция: {item['ratio_names'][0]} : {item['ratio_names'][1]} = {item['report_ratio']}. Не заменяет дозировку ниже."] if item.get("report_ratio") else []),
             f"Как: {item.get('apply', '')}",
             *(["Риск: " + "; ".join(item["warnings"])] if item.get("warnings") else []),
             "",
@@ -702,27 +759,72 @@ def _format_preset_page(pairs: list[dict], offset: int) -> str:
     return "\n".join(lines).strip()
 
 
+SEASON_LABELS = {"spring": "весна", "summer": "лето", "autumn": "осень", "winter": "зима"}
+TIME_LABELS = {"morning": "утро", "day": "день", "evening": "вечер", "night": "ночь"}
+
+
 @router.message(F.text == "Готовые пары наслаивания")
+@router.message(PresetLayeringBrowseForm.active, F.text == "Изменить фильтр пар")
 async def preset_layering(message: Message, state: FSMContext):
     if await deny_if_not_owner(message): return
     situation = await _require_last_situation(message, state, notify=False)
-    pairs = get_preset_layering_pairs(situation)
+    await state.set_state(PresetLayeringBrowseForm.season)
+    await state.update_data(preset_situation=situation.model_dump(mode="json") if situation else None, preset_season=None, preset_time=None, preset_offset=0)
+    await message.answer("Выбери сезон или используй дату и время последнего подбора.", reply_markup=preset_season_keyboard())
+
+
+async def _send_filtered_presets(message: Message, state: FSMContext, offset: int = 0):
+    data = await state.get_data()
+    raw = data.get("preset_situation")
+    situation = Situation.model_validate(raw) if raw else None
+    pairs = get_preset_layering_pairs(situation, season=data.get("preset_season"), time_of_day=data.get("preset_time"))
     await state.set_state(PresetLayeringBrowseForm.active)
-    await state.update_data(preset_offset=PRESET_PAGE_SIZE, preset_situation=situation.model_dump(mode="json") if situation else None)
-    await message.answer(_format_preset_page(pairs, 0), reply_markup=preset_layering_keyboard(len(pairs) > PRESET_PAGE_SIZE))
+    await state.update_data(preset_offset=offset + PRESET_PAGE_SIZE)
+    filter_text = f"Фильтр: {SEASON_LABELS.get(data.get('preset_season'), 'все сезоны')}, {TIME_LABELS.get(data.get('preset_time'), 'любое время')}"
+    if data.get("preset_use_date") and situation and situation.target_datetime:
+        filter_text += f". Дата и время: {situation.target_datetime:%d.%m.%Y %H:%M}"
+    if situation:
+        filter_text += f". Температура последнего подбора: {situation.temperature:g}°C"
+    await message.answer(filter_text + "\n\n" + _format_preset_page(pairs, offset), reply_markup=preset_layering_keyboard(offset + PRESET_PAGE_SIZE < len(pairs)))
+
+
+@router.message(PresetLayeringBrowseForm.season)
+async def preset_select_season(message: Message, state: FSMContext):
+    if await deny_if_not_owner(message): return
+    text = message.text or ""
+    if text == "По выбранной дате и времени":
+        data = await state.get_data()
+        if not data.get("preset_situation"):
+            await message.answer("Сначала сделай подбор с датой и временем либо выбери сезон вручную.", reply_markup=preset_season_keyboard()); return
+        situation = Situation.model_validate(data["preset_situation"])
+        await state.update_data(preset_season=situation.season, preset_time=situation.time_of_day, preset_use_date=True)
+        await _send_filtered_presets(message, state); return
+    if text == "Все пары":
+        await state.update_data(preset_season=None, preset_time=None, preset_use_date=False)
+        await _send_filtered_presets(message, state); return
+    season = SEASON_MAP.get(text)
+    if season not in SEASON_LABELS:
+        await message.answer("Выбери сезон из кнопок.", reply_markup=preset_season_keyboard()); return
+    await state.update_data(preset_season=season, preset_use_date=False)
+    await state.set_state(PresetLayeringBrowseForm.time)
+    await message.answer("Выбери время суток.", reply_markup=preset_time_keyboard())
+
+
+@router.message(PresetLayeringBrowseForm.time)
+async def preset_select_time(message: Message, state: FSMContext):
+    if await deny_if_not_owner(message): return
+    text = message.text or ""
+    value = None if text == "Любое время" else TIME_MAP.get(text)
+    if text != "Любое время" and value not in TIME_LABELS:
+        await message.answer("Выбери время из кнопок.", reply_markup=preset_time_keyboard()); return
+    await state.update_data(preset_time=value)
+    await _send_filtered_presets(message, state)
 
 
 @router.message(PresetLayeringBrowseForm.active, F.text == "Ещё готовые пары")
 async def more_preset_layering(message: Message, state: FSMContext):
     if await deny_if_not_owner(message): return
-    data = await state.get_data()
-    offset = int(data.get("preset_offset", 0))
-    raw_situation = data.get("preset_situation")
-    situation = Situation.model_validate(raw_situation) if raw_situation else None
-    pairs = get_preset_layering_pairs(situation)
-    await state.update_data(preset_offset=offset + PRESET_PAGE_SIZE)
-    has_more = offset + PRESET_PAGE_SIZE < len(pairs)
-    await message.answer(_format_preset_page(pairs, offset), reply_markup=preset_layering_keyboard(has_more))
+    await _send_filtered_presets(message, state, int((await state.get_data()).get("preset_offset", 0)))
 
 
 # ---------- why not / reverse ----------

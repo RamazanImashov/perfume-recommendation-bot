@@ -9,6 +9,8 @@ class PerfumeForm(StatesGroup):
     effect = State()
     target_time = State()
     manual_target_time = State()
+    manual_date = State()
+    manual_temperature = State()
     advanced = State()
     time = State()
     season = State()
@@ -42,6 +44,8 @@ class WhyNotForm(StatesGroup):
 
 
 class PresetLayeringBrowseForm(StatesGroup):
+    season = State()
+    time = State()
     active = State()
 
 

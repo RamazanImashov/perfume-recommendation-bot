@@ -30,8 +30,17 @@ def preset_layering_keyboard(has_more: bool = True) -> ReplyKeyboardMarkup:
     rows = []
     if has_more:
         rows.append([KeyboardButton(text="Ещё готовые пары")])
+    rows.append([KeyboardButton(text="Изменить фильтр пар")])
     rows.append([KeyboardButton(text="Главное меню")])
     return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
+
+
+def preset_season_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="Весна"), KeyboardButton(text="Лето")], [KeyboardButton(text="Осень"), KeyboardButton(text="Зима")], [KeyboardButton(text="Все пары")], [KeyboardButton(text="По выбранной дате и времени")], [KeyboardButton(text="Главное меню")]], resize_keyboard=True)
+
+
+def preset_time_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="Утро"), KeyboardButton(text="День")], [KeyboardButton(text="Вечер"), KeyboardButton(text="Ночь")], [KeyboardButton(text="Любое время")], [KeyboardButton(text="Главное меню")]], resize_keyboard=True)
 
 
 def location_keyboard(has_previous: bool = False) -> ReplyKeyboardMarkup:
@@ -78,7 +87,8 @@ def target_time_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(keyboard=[
         [KeyboardButton(text="Сейчас"), KeyboardButton(text="Через 1 час")],
         [KeyboardButton(text="Через 2 часа"), KeyboardButton(text="Вечером")],
-        [KeyboardButton(text="Указать время")], [KeyboardButton(text="Отмена")],
+        [KeyboardButton(text="Сегодня"), KeyboardButton(text="Завтра")],
+        [KeyboardButton(text="Выбрать дату"), KeyboardButton(text="Указать время")], [KeyboardButton(text="Отмена")],
     ], resize_keyboard=True)
 
 

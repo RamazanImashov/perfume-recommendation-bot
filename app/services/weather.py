@@ -1,9 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import aiohttp
+
+class ForecastUnavailable(ValueError):
+    pass
+
 
 HTTP_TIMEOUT = aiohttp.ClientTimeout(total=12)
 
@@ -49,7 +53,7 @@ async def get_weather(
 ) -> dict:
     """Return current weather or the nearest hourly forecast for target_datetime.
 
-    Falls back to current conditions when hourly data cannot be matched.
+    Explicit targets never fall back to current or out-of-range conditions.
     """
     url = "https://api.open-meteo.com/v1/forecast"
     hourly_vars = ",".join([
@@ -78,7 +82,12 @@ async def get_weather(
             hourly = data.get("hourly") or {}
             times = hourly.get("time") or []
             if times:
+                target_naive = local_target.replace(tzinfo=None)
+                if not datetime.fromisoformat(times[0]) <= target_naive <= datetime.fromisoformat(times[-1]) + timedelta(minutes=30):
+                    raise ForecastUnavailable("Дата за пределами доступного прогноза")
                 idx = _closest_hour_index(times, local_target)
+                if _hourly_value(hourly, "temperature_2m", idx) is None:
+                    raise ForecastUnavailable("Температура прогноза отсутствует")
                 return {
                     "temperature": _hourly_value(hourly, "temperature_2m", idx),
                     "feels_like": _hourly_value(hourly, "apparent_temperature", idx),
@@ -93,8 +102,11 @@ async def get_weather(
                     "forecast_time": times[idx],
                     "source": "hourly_forecast",
                 }
-        except Exception:
-            pass
+        except ForecastUnavailable:
+            raise
+        except Exception as exc:
+            raise ForecastUnavailable("Прогноз недоступен") from exc
+        raise ForecastUnavailable("Почасовой прогноз отсутствует")
 
     return {
         "temperature": current.get("temperature_2m"),
