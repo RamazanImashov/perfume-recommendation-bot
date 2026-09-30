@@ -41,7 +41,7 @@ async def test_weather_failure_requests_manual_temperature(ui, monkeypatch):
     await ui._after_target_time(message, state, datetime(2026,10,3,20,30,tzinfo=ZoneInfo('Asia/Bishkek')))
     from app.states import PerfumeForm
     assert state.set_state.call_args.args[0] == PerfumeForm.manual_temperature
-    assert 'температуру' in message.answer.call_args.args[0]
+    assert 'диапазон температуры' in message.answer.call_args.args[0]
 
 
 @pytest.mark.asyncio
@@ -100,7 +100,7 @@ async def test_invalid_or_past_time_not_rolled_to_tomorrow(ui,state,monkeypatch,
 async def test_manual_temperature_preserves_selected_datetime(ui,state):
     from app.states import PerfumeForm
     await state.update_data(target_datetime='2026-12-31T22:15:00+06:00')
-    message=AsyncMock(); message.text='-5,5'
+    message=AsyncMock(); message.text='от -8 до -3'
     await ui.manual_temperature(message,state)
     data=await state.get_data()
     assert data['weather']['temperature'] == -5.5

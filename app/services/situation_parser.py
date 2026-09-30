@@ -115,6 +115,8 @@ def build_situation(
         time_of_day=time_of_day,
         season=season,
         temperature=float(weather.get("temperature") if weather.get("temperature") is not None else 20.0),
+        temperature_min=weather.get("temperature_min"),
+        temperature_max=weather.get("temperature_max"),
         feels_like=float(weather["feels_like"]) if weather.get("feels_like") is not None else None,
         humidity=float(weather["humidity"]) if weather.get("humidity") is not None else None,
         rain=float(weather.get("rain") or 0.0),

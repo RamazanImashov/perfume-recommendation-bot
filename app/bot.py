@@ -335,11 +335,17 @@ def _resolve_quick_target(label: str, timezone_name: str | None) -> datetime | N
     return None
 
 
+def _temperature_label(temperature: float, low: float | None = None, high: float | None = None) -> str:
+    if low is not None and high is not None:
+        return f"от {low:g} до {high:g}°C"
+    return f"{temperature:g}°C"
+
+
 async def _finish_target_weather(message: Message, state: FSMContext, target: datetime, weather: dict) -> None:
     await state.update_data(target_datetime=target.isoformat(), weather=weather, selected_date=None, time_of_day="auto", season="auto", outdoor_exposure=None)
     await state.set_state(PerfumeForm.advanced)
     source = "вручную" if weather.get("source") == "manual" else "прогноз"
-    await message.answer(f"Дата и время: {target:%d.%m.%Y %H:%M} ({target.tzinfo}). Температура: {weather['temperature']:g}°C, {source}.\nДополнительные настройки?", reply_markup=advanced_keyboard())
+    await message.answer(f"Дата и время: {target:%d.%m.%Y %H:%M} ({target.tzinfo}). Температура: {_temperature_label(weather['temperature'], weather.get('temperature_min'), weather.get('temperature_max'))}, {source}.\nДополнительные настройки?", reply_markup=advanced_keyboard())
 
 
 async def _after_target_time(message: Message, state: FSMContext, target: datetime) -> None:
@@ -351,7 +357,7 @@ async def _after_target_time(message: Message, state: FSMContext, target: dateti
     except Exception:
         await state.update_data(target_datetime=target.isoformat())
         await state.set_state(PerfumeForm.manual_temperature)
-        await message.answer(f"Прогноз на {target:%d.%m.%Y %H:%M} недоступен. Напиши ожидаемую температуру, например 18 или -5.", reply_markup=remove_keyboard)
+        await message.answer(f"Прогноз на {target:%d.%m.%Y %H:%M} недоступен. Напиши ожидаемый диапазон температуры, например от 10 до 15 или от -10 до -5.", reply_markup=remove_keyboard)
         return
     await _finish_target_weather(message, state, target, weather)
 
@@ -414,14 +420,17 @@ async def manual_temperature(message: Message, state: FSMContext):
     if await deny_if_not_owner(message): return
     text = (message.text or "").strip().replace(",", ".")
     try:
-        if not re.fullmatch(r"[+-]?\d{1,2}(?:\.\d{1,2})?", text): raise ValueError
-        temp = float(text)
-        if not -60 <= temp <= 60: raise ValueError
+        number = r"([+-]?\d{1,2}(?:\.\d{1,2})?)"
+        match = re.fullmatch(rf"(?:от\s+)?{number}\s*(?:до|[-–—])\s*{number}", text, re.IGNORECASE)
+        if not match: raise ValueError
+        low, high = map(float, match.groups())
+        if not -60 <= low <= high <= 60: raise ValueError
+        temp = (low + high) / 2
     except ValueError:
-        await message.answer("Напиши температуру числом от -60 до 60, например 18 или -5."); return
+        await message.answer("Напиши диапазон: от 10 до 15 или от -10 до -5. Границы от -60 до 60°C, первая не выше второй."); return
     data = await state.get_data()
     target = datetime.fromisoformat(data["target_datetime"])
-    weather = {"temperature": temp, "humidity": None, "cloud_cover": None, "wind_speed": None, "rain": 0, "precipitation": 0, "is_day": 6 <= target.hour < 18, "source": "manual"}
+    weather = {"temperature": temp, "temperature_min": low, "temperature_max": high, "humidity": None, "cloud_cover": None, "wind_speed": None, "rain": 0, "precipitation": 0, "is_day": 6 <= target.hour < 18, "source": "manual"}
     await _finish_target_weather(message, state, target, weather)
 
 
@@ -572,7 +581,7 @@ async def more_recommendations(message: Message, state: FSMContext):
 
 def format_perfume_results(situation: Situation, results, start_index: int = 1, title: str = "Топ-3") -> str:
     if not results: return "Больше вариантов не нашёл."
-    lines = [f"{situation.location or 'Локация'}: {situation.temperature:g}°C · {title}", f"Дата и время: {situation.target_datetime:%d.%m.%Y %H:%M}" if situation.target_datetime else "", ""]
+    lines = [f"{situation.location or 'Локация'}: {_temperature_label(situation.temperature, situation.temperature_min, situation.temperature_max)} · {title}", f"Дата и время: {situation.target_datetime:%d.%m.%Y %H:%M}" if situation.target_datetime else "", ""]
     for idx, result in enumerate(results, start=start_index):
         lines.append(f"{idx}. {result.name} — {result.brand} · {perfume_volume_label(result.name)}")
         lines.append(f"{result.score:.0f}/100 · Уверенность: {result.confidence_label} · {result.role}")
@@ -587,7 +596,7 @@ def format_perfume_results(situation: Situation, results, start_index: int = 1, 
 
 def format_layering_results(situation: Situation, results, start_index: int = 1, title: str = "Топ-3 наслаивания") -> str:
     if not results: return "Больше пар не нашёл."
-    lines = [f"{situation.location or 'Локация'}: {situation.temperature:g}°C · {title}", f"Дата и время: {situation.target_datetime:%d.%m.%Y %H:%M}" if situation.target_datetime else "", ""]
+    lines = [f"{situation.location or 'Локация'}: {_temperature_label(situation.temperature, situation.temperature_min, situation.temperature_max)} · {title}", f"Дата и время: {situation.target_datetime:%d.%m.%Y %H:%M}" if situation.target_datetime else "", ""]
     for idx, result in enumerate(results, start=start_index):
         lines.append(f"{idx}. {result.base_name} ({perfume_volume_label(result.base_name)}) + {result.top_name} ({perfume_volume_label(result.top_name)})")
         lines.append(f"{result.score:.0f}/100 · Уверенность: {result.confidence_label}")
@@ -800,7 +809,7 @@ async def _send_filtered_presets(message: Message, state: FSMContext, offset: in
     if data.get("preset_use_date") and situation and situation.target_datetime:
         filter_text += f". Дата и время: {situation.target_datetime:%d.%m.%Y %H:%M}"
     if situation:
-        filter_text += f". Температура последнего подбора: {situation.temperature:g}°C"
+        filter_text += f". Температура последнего подбора: {_temperature_label(situation.temperature, situation.temperature_min, situation.temperature_max)}"
     await message.answer(filter_text + "\n\n" + _format_preset_page(pairs, offset), reply_markup=preset_layering_keyboard(offset + PRESET_PAGE_SIZE < len(pairs)))
 
 

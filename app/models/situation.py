@@ -24,6 +24,8 @@ class Situation(BaseModel):
     time_of_day: TimeOfDay = "day"
     season: Season = "summer"
     temperature: float = 20.0
+    temperature_min: float | None = None
+    temperature_max: float | None = None
     feels_like: float | None = None
     humidity: float | None = None
     rain: float = 0.0
