@@ -506,8 +506,11 @@ async def get_mode(message: Message, state: FSMContext):
     mode = message.text or ""
     if mode not in {"Обычный парфюм", "Наслаивание"}:
         await message.answer("Выбери вариант.", reply_markup=recommendation_mode_keyboard()); return
-    data = await state.get_data()
-    situation = _situation_from_data(data)
+    situation = _situation_from_data(await state.get_data())
+    await _send_scenario_recommendations(message, state, situation, mode)
+
+
+async def _send_scenario_recommendations(message: Message, state: FSMContext, situation: Situation, mode: str):
     snapshot = await _personal_snapshot()
     if mode == "Обычный парфюм":
         results = await _ordinary_results(situation, 3, snapshot)
@@ -518,11 +521,24 @@ async def get_mode(message: Message, state: FSMContext):
         text = format_layering_results(situation, results)
         payload = {"mode": mode, "situation": situation.model_dump(mode="json"), "items": [r.model_dump(mode="json") for r in results]}
     await state.set_state(RecommendationBrowseForm.active)
-    await state.update_data(recommendation_context=payload, recommendation_offset=3)
+    await state.update_data(recommendation_context=payload, recommendation_offset=len(results))
     if history.enabled:
         await history.save_last_situation(situation.model_dump(mode="json"))
         await history.save_last_recommendation(payload)
-    await message.answer(text, reply_markup=recommendation_result_keyboard())
+    await message.answer(text, reply_markup=recommendation_result_keyboard(mode))
+
+
+
+@router.message(F.text.in_({"Наслоения под этот сценарий", "Ароматы под этот сценарий"}))
+async def switch_recommendation_mode(message: Message, state: FSMContext):
+    if await deny_if_not_owner(message): return
+    data = await state.get_data()
+    context = data.get("recommendation_context") or (await history.get_last_recommendation() if history.enabled else None)
+    if not context:
+        await message.answer("Сначала сделай подбор.", reply_markup=main_keyboard()); return
+    situation = Situation.model_validate(context["situation"])
+    mode = "Наслаивание" if message.text == "Наслоения под этот сценарий" else "Обычный парфюм"
+    await _send_scenario_recommendations(message, state, situation, mode)
 
 
 @router.message(F.text == "Другие варианты")
@@ -551,7 +567,7 @@ async def more_recommendations(message: Message, state: FSMContext):
     await state.update_data(recommendation_context=context, recommendation_offset=offset + len(results))
     if history.enabled:
         await history.save_last_recommendation(context)
-    await message.answer(text, reply_markup=recommendation_result_keyboard())
+    await message.answer(text, reply_markup=recommendation_result_keyboard(context["mode"]))
 
 
 def format_perfume_results(situation: Situation, results, start_index: int = 1, title: str = "Топ-3") -> str:

@@ -17,9 +17,10 @@ def main_keyboard() -> ReplyKeyboardMarkup:
     ], resize_keyboard=True)
 
 
-def recommendation_result_keyboard() -> ReplyKeyboardMarkup:
+def recommendation_result_keyboard(mode: str = "Обычный парфюм") -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(keyboard=[
         [KeyboardButton(text="Другие варианты")],
+        [KeyboardButton(text="Ароматы под этот сценарий" if mode == "Наслаивание" else "Наслоения под этот сценарий")],
         [KeyboardButton(text="Как прошло?")],
         [KeyboardButton(text="Почему не этот аромат?")],
         [KeyboardButton(text="Подобрать аромат"), KeyboardButton(text="Главное меню")],
