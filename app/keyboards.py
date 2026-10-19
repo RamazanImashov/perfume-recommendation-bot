@@ -8,12 +8,23 @@ remove_keyboard = ReplyKeyboardRemove()
 def main_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(keyboard=[
         [KeyboardButton(text="Подобрать аромат")],
+        [KeyboardButton(text="🎲 Рандом")],
         [KeyboardButton(text="Хочу надеть конкретный аромат")],
         [KeyboardButton(text="Почему не этот аромат?")],
         [KeyboardButton(text="Наслаивание вручную"), KeyboardButton(text="Готовые пары наслаивания")],
         [KeyboardButton(text="Все мои парфюмы")],
         [KeyboardButton(text="Как в прошлый раз")],
         [KeyboardButton(text="Отмена")],
+    ], resize_keyboard=True)
+
+
+
+def random_result_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(keyboard=[
+        [KeyboardButton(text="🎲 Ещё рандом")],
+        [KeyboardButton(text="Наслоение с этим ароматом")],
+        [KeyboardButton(text="Информация об аромате")],
+        [KeyboardButton(text="Главное меню")],
     ], resize_keyboard=True)
 
 

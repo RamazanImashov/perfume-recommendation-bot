@@ -33,6 +33,7 @@ from app.keyboards import (
     preset_time_keyboard,
     recommendation_mode_keyboard,
     recommendation_result_keyboard,
+    random_result_keyboard,
     remove_keyboard,
     season_keyboard,
     target_time_keyboard,
@@ -51,6 +52,7 @@ from app.services.layering import (
     recommend_layering_situation,
 )
 from app.services.personalization import build_personal_snapshot
+from app.services.randomizer import RandomCandidate, random_candidate
 from app.services.recommender import (
     CIRCUMSTANCE_MAP,
     EFFECT_MAP,
@@ -128,6 +130,83 @@ async def set_favorites(message: Message):
     if await deny_if_not_owner(message): return
     await history.set_preference("repeat_mode", "favorites")
     await message.answer("Режим: Повторять любимые.", reply_markup=main_keyboard())
+
+
+# ---------- random ----------
+
+
+def _format_random_candidate(candidate: RandomCandidate) -> str:
+    perfume = candidate.perfume
+    lines = [
+        "🎲 Рандом",
+        f"{perfume['name']} — {perfume['brand']} · {perfume_volume_label(perfume['name'])}",
+        f"Универсальность: {candidate.versatility_score:.0f}/100",
+        "Алгоритм учёл пригодность для разных событий, сезонов, времени суток, помещений, улицы, температур и стойкости.",
+    ]
+    description = perfume.get("description") or perfume.get("summary")
+    if description:
+        lines.append(f"Характер: {description}")
+    application = perfume.get("apply")
+    sprays = perfume.get("sprays")
+    if sprays or application:
+        lines.append("Как: " + ". ".join(value for value in (f"{sprays} пш." if sprays else "", application or "") if value))
+    risk = perfume.get("minus")
+    if risk:
+        lines.append(f"Риск: {risk}")
+    return "\n".join(lines)
+
+
+@router.message(F.text.in_({"🎲 Рандом", "🎲 Ещё рандом"}))
+async def random_perfume(message: Message, state: FSMContext):
+    if await deny_if_not_owner(message): return
+    previous_id = (await state.get_data()).get("last_random_perfume_id")
+    candidate = random_candidate(PERFUMES, exclude_id=previous_id)
+    await state.clear()
+    await state.update_data(last_random_perfume_id=candidate.perfume.get("id"))
+    await message.answer(_format_random_candidate(candidate), reply_markup=random_result_keyboard())
+
+
+@router.message(F.text == "Наслоение с этим ароматом")
+async def random_layering(message: Message, state: FSMContext):
+    if await deny_if_not_owner(message): return
+    perfume = _perfume_by_id((await state.get_data()).get("last_random_perfume_id"))
+    if not perfume:
+        await message.answer("Сначала нажми «🎲 Рандом».", reply_markup=main_keyboard()); return
+    pairs = [analyze_pair(perfume, other) for other in PERFUMES if other.get("id") != perfume.get("id")]
+    pair = max(pairs, key=lambda item: (item["score"], item["base"]["name"], item["top"]["name"]))
+    lines = [
+        f"{pair['base']['name']} ({perfume_volume_label(pair['base']['name'])}) + {pair['top']['name']} ({perfume_volume_label(pair['top']['name'])})",
+        f"Совместимость без сценария: {pair['score']:.0f}/100",
+        f"Как: {pair['apply']}",
+    ]
+    if pair.get("reasons"):
+        lines.append("Почему: " + "; ".join(pair["reasons"][:2]) + ".")
+    if pair.get("warnings"):
+        lines.append("Риск: " + pair["warnings"][0] + ".")
+    await message.answer("\n".join(lines), reply_markup=random_result_keyboard())
+
+
+@router.message(F.text == "Информация об аромате")
+async def random_perfume_info(message: Message, state: FSMContext):
+    if await deny_if_not_owner(message): return
+    perfume = _perfume_by_id((await state.get_data()).get("last_random_perfume_id"))
+    if not perfume:
+        await message.answer("Сначала нажми «🎲 Рандом».", reply_markup=main_keyboard()); return
+    profile = build_perfume_profile(perfume)
+    accords = perfume.get("main_accords") or perfume.get("type") or []
+    lines = [
+        f"{profile.name} — {profile.brand} · {perfume_volume_label(profile.name)}",
+        f"Для кого: {perfume.get('gender', 'unisex')}",
+        f"Диапазон температуры: {profile.comfortable_temperature_min:g}–{profile.comfortable_temperature_max:g}°C",
+        f"Стойкость: {profile.longevity:g}/5 · Шлейф: {profile.projection:g}/5",
+    ]
+    if accords:
+        lines.append("Аккорды: " + ", ".join(str(value) for value in accords[:6]) + ".")
+    if perfume.get("best_for"):
+        lines.append("Лучше всего: " + perfume["best_for"])
+    if perfume.get("minus"):
+        lines.append("Ограничение: " + perfume["minus"])
+    await message.answer("\n".join(lines), reply_markup=random_result_keyboard())
 
 
 # ---------- catalog ----------
